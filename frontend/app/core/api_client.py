@@ -1,7 +1,8 @@
+import os
 import httpx
 from typing import Optional
 
-API_BASE_URL = "http://127.0.0.1:8000/api/v1"
+API_BASE_URL = os.getenv("API_BASE_URL", "https://academix-pro.onrender.com/api/v1")
 
 class ApiClient:
     _instance = None
@@ -9,7 +10,7 @@ class ApiClient:
     def __new__(cls):
         if cls._instance is None:
             cls._instance = super(ApiClient, cls).__new__(cls)
-            cls._instance.client = httpx.Client(base_url=API_BASE_URL, timeout=10.0)
+            cls._instance.client = httpx.Client(base_url=API_BASE_URL, timeout=30.0)
             cls._instance.token = None
         return cls._instance
 
