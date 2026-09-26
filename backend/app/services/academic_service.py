@@ -1,3 +1,4 @@
+from sqlalchemy import func
 from sqlalchemy.orm import Session, joinedload
 from app.db.models.academic import (
     AcademicPeriod,
@@ -152,6 +153,7 @@ def calculate_subject_metrics(
         is_passed=is_passed,
         max_possible_grade=max_possible,
         required_average_remaining=required_avg_remaining,
+        max_evaluations=getattr(subject, "max_evaluations", None),
         evaluations=eval_responses,
     ), accumulated_points, current_avg, passing_score, is_passed
 
@@ -197,6 +199,7 @@ def create_subject(db: Session, user: User, subject_in: SubjectCreate) -> Subjec
         max_grade_override=subject_in.max_grade_override,
         target_grade=subject_in.target_grade or 20.0,
         credits=subject_in.credits or 0,
+        max_evaluations=subject_in.max_evaluations,
     )
     db.add(db_subject)
     db.commit()
@@ -246,6 +249,56 @@ def delete_subject(db: Session, user: User, subject_id: str):
     return {"status": "success", "message": "Materia eliminada exitosamente"}
 
 
+def get_subject_evaluations(db: Session, user: User, subject_id: str) -> list[EvaluationResponse]:
+    """Lista todas las evaluaciones registradas de una materia."""
+    subject = (
+        db.query(Subject)
+        .join(AcademicPeriod)
+        .filter(Subject.id == subject_id, AcademicPeriod.user_id == user.id)
+        .first()
+    )
+    if not subject:
+        raise HTTPException(status_code=404, detail="Materia no encontrada")
+
+    evaluations = (
+        db.query(Evaluation)
+        .options(joinedload(Evaluation.grade))
+        .filter(Evaluation.subject_id == subject_id)
+        .order_by(Evaluation.date.asc(), Evaluation.name.asc())
+        .all()
+    )
+
+    results = []
+    for ev in evaluations:
+        grade_resp = None
+        points_earned = None
+        if ev.grade is not None and ev.grade.score is not None:
+            grade_resp = GradeResponse(
+                id=ev.grade.id,
+                evaluation_id=ev.grade.evaluation_id,
+                score=ev.grade.score,
+                notes=ev.grade.notes,
+            )
+            points_earned = round(ev.grade.score * (ev.weight_percent / 100.0), 2)
+
+        results.append(
+            EvaluationResponse(
+                id=ev.id,
+                subject_id=ev.subject_id,
+                name=ev.name,
+                description=ev.description,
+                eval_type=ev.eval_type,
+                weight_percent=ev.weight_percent,
+                date=ev.date,
+                status=ev.status or "pendiente",
+                max_grade=ev.max_grade or 20.0,
+                points_earned=points_earned,
+                grade=grade_resp,
+            )
+        )
+    return results
+
+
 def create_evaluation(db: Session, user: User, subject_id: str, eval_in: EvaluationCreate) -> EvaluationResponse:
     subject = (
         db.query(Subject)
@@ -255,6 +308,32 @@ def create_evaluation(db: Session, user: User, subject_id: str, eval_in: Evaluat
     )
     if not subject:
         raise HTTPException(status_code=404, detail="Materia no encontrada")
+
+    # Validación de límite de evaluaciones planificadas por materia/periodo
+    max_evals = getattr(subject, "max_evaluations", None)
+    if not max_evals and user.settings and getattr(user.settings, "default_eval_count", None):
+        max_evals = user.settings.default_eval_count
+    if not max_evals:
+        max_evals = 5
+
+    current_evals_count = db.query(Evaluation).filter(Evaluation.subject_id == subject_id).count()
+    if current_evals_count >= max_evals:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Has alcanzado el límite máximo de evaluaciones configuradas para este periodo ({max_evals} evaluaciones)."
+        )
+
+    # Validar sumatoria de porcentaje acumulado (máximo 100%)
+    existing_weights_sum = (
+        db.query(func.coalesce(func.sum(Evaluation.weight_percent), 0.0))
+        .filter(Evaluation.subject_id == subject_id)
+        .scalar()
+    )
+    if (existing_weights_sum + eval_in.weight_percent) > 100.0:
+        raise HTTPException(
+            status_code=400,
+            detail=f"La ponderación acumulada ({existing_weights_sum + eval_in.weight_percent:.1f}%) excedería el 100% permitido."
+        )
 
     status = "calificada" if eval_in.score is not None else "pendiente"
 
@@ -317,6 +396,18 @@ def update_evaluation(db: Session, user: User, eval_id: str, eval_in: Evaluation
     )
     if not evaluation:
         raise HTTPException(status_code=404, detail="Evaluación no encontrada")
+
+    if eval_in.weight_percent is not None and eval_in.weight_percent != evaluation.weight_percent:
+        other_weights_sum = (
+            db.query(func.coalesce(func.sum(Evaluation.weight_percent), 0.0))
+            .filter(Evaluation.subject_id == evaluation.subject_id, Evaluation.id != eval_id)
+            .scalar()
+        )
+        if (other_weights_sum + eval_in.weight_percent) > 100.0:
+            raise HTTPException(
+                status_code=400,
+                detail=f"La ponderación acumulada ({other_weights_sum + eval_in.weight_percent:.1f}%) excedería el 100% permitido."
+            )
 
     if eval_in.name is not None:
         evaluation.name = eval_in.name

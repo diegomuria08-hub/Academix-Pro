@@ -35,6 +35,7 @@ class Subject(Base):
     max_grade_override = Column(Float, nullable=True)
     target_grade = Column(Float, default=20.0)
     credits = Column(Integer, default=0)
+    max_evaluations = Column(Integer, nullable=True)
     is_archived = Column(Boolean, default=False)
     
     period = relationship("AcademicPeriod", back_populates="subjects")

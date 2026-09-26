@@ -20,6 +20,45 @@ def SubjectsScreen(page: ft.Page, view_mode: str = "notas"):
     loading_ring = ft.ProgressBar(visible=False, color=AcademixColors.CYAN_NEON)
     
     current_subjects_cache = []
+    subject_cards_map = {}
+
+    def recalculate_subject_metrics_locally(sub):
+        max_scale = float(sub.get("max_scale", 20.0))
+        passing_grade = float(sub.get("passing_grade", 10.0))
+        evals = sub.get("evaluations", [])
+
+        accum_pts = 0.0
+        accum_pct = 0.0
+
+        for ev in evals:
+            grade_obj = ev.get("grade")
+            score_val = grade_obj.get("score") if grade_obj else None
+            weight = float(ev.get("weight_percent", 0.0))
+            if score_val is not None:
+                pts_contrib = round(float(score_val) * (weight / 100.0), 2)
+                accum_pts += pts_contrib
+                accum_pct += weight
+
+        accum_pts = round(accum_pts, 2)
+        accum_pct = round(accum_pct, 1)
+
+        is_passed = accum_pts >= passing_grade
+        points_needed = round(max(0.0, passing_grade - accum_pts), 2) if not is_passed else 0.0
+        remaining_weight = max(0.0, round(100.0 - accum_pct, 1))
+        max_possible = min(max_scale, round(accum_pts + max_scale * (remaining_weight / 100.0), 2))
+
+        required_avg = None
+        if is_passed:
+            required_avg = 0.0
+        elif remaining_weight > 0:
+            required_avg = round(points_needed / (remaining_weight / 100.0), 2)
+
+        sub["accumulated_points"] = accum_pts
+        sub["accumulated_percent"] = accum_pct
+        sub["is_passed"] = is_passed
+        sub["points_needed_to_pass"] = points_needed
+        sub["max_possible_grade"] = max_possible
+        sub["required_average_remaining"] = required_avg
 
     def show_snack(message: str, error: bool = False):
         snack = ft.SnackBar(
@@ -192,10 +231,38 @@ def SubjectsScreen(page: ft.Page, view_mode: str = "notas"):
         )
         page.show_dialog(subject_dialog)
 
+    # ─── Validación de Límite y Apertura de Modal ─────────────────
+    def check_and_open_eval_modal(subject_id: str):
+        sub = next((s for s in current_subjects_cache if s["id"] == subject_id), None)
+        if sub:
+            max_evals = sub.get("max_evaluations")
+            if not max_evals and state.current_user and state.current_user.get("settings"):
+                max_evals = state.current_user["settings"].get("default_eval_count", 5)
+            if not max_evals:
+                max_evals = 5
+
+            existing_evals = sub.get("evaluations", [])
+            if len(existing_evals) >= int(max_evals):
+                show_snack("Has alcanzado el límite máximo de evaluaciones configuradas para este periodo", error=True)
+                return
+        open_eval_modal(subject_id)
+
     # ─── Modal para Agregar / Editar Evaluación ───────────────────
     def open_eval_modal(subject_id: str, eval_to_edit=None):
         is_edit = eval_to_edit is not None
         title_text = "Editar Evaluación" if is_edit else "Nueva Evaluación"
+
+        current_sub = next((s for s in current_subjects_cache if s["id"] == subject_id), None)
+        if not is_edit and current_sub:
+            max_evals = current_sub.get("max_evaluations")
+            if not max_evals and state.current_user and state.current_user.get("settings"):
+                max_evals = state.current_user["settings"].get("default_eval_count", 5)
+            if not max_evals:
+                max_evals = 5
+
+            if len(current_sub.get("evaluations", [])) >= int(max_evals):
+                show_snack("Has alcanzado el límite máximo de evaluaciones configuradas para este periodo", error=True)
+                return
 
         modal_error = ft.Text("", color=AcademixColors.ERROR, size=12, visible=False)
 
@@ -329,9 +396,23 @@ def SubjectsScreen(page: ft.Page, view_mode: str = "notas"):
                     resp = api.create_evaluation(subject_id, payload)
 
                 if resp.status_code in [200, 201]:
+                    saved_eval = resp.json()
                     page.pop_dialog()
                     show_snack("✅ Evaluación guardada en la base de datos")
-                    load_data()
+                    sub = next((s for s in current_subjects_cache if s["id"] == subject_id), None)
+                    if sub:
+                        if is_edit:
+                            sub["evaluations"] = [saved_eval if ev["id"] == eval_to_edit["id"] else ev for ev in sub.get("evaluations", [])]
+                        else:
+                            sub["evaluations"] = sub.get("evaluations", []) + [saved_eval]
+                        recalculate_subject_metrics_locally(sub)
+                        if subject_id in subject_cards_map:
+                            subject_cards_map[subject_id].content = build_subject_card(sub)
+                            subject_cards_map[subject_id].update()
+                        else:
+                            load_data()
+                    else:
+                        load_data()
                 else:
                     detail = resp.json().get("detail", "Error al guardar la evaluación")
                     modal_error.value = str(detail)
@@ -405,14 +486,20 @@ def SubjectsScreen(page: ft.Page, view_mode: str = "notas"):
         )
         page.show_dialog(del_dialog)
 
-    def confirm_delete_eval(eval_id: str, name: str):
+    def confirm_delete_eval(sub_id: str, eval_id: str, name: str):
         def delete(e):
             try:
                 resp = api.delete_evaluation(eval_id)
                 page.pop_dialog()
-                if resp.status_code == 200:
-                    show_snack(f"Evaluación '{name}' eliminada")
-                    load_data()
+                if resp.status_code in [200, 204]:
+                    sub = next((s for s in current_subjects_cache if s["id"] == sub_id), None)
+                    if sub:
+                        sub["evaluations"] = [ev for ev in sub.get("evaluations", []) if ev["id"] != eval_id]
+                        recalculate_subject_metrics_locally(sub)
+                        if sub_id in subject_cards_map:
+                            subject_cards_map[sub_id].content = build_subject_card(sub)
+                            subject_cards_map[sub_id].update()
+                    show_snack(f"Evaluación '{name}' eliminada correctamente")
                 else:
                     show_snack("Error al eliminar la evaluación", error=True)
             except Exception as ex:
@@ -421,22 +508,309 @@ def SubjectsScreen(page: ft.Page, view_mode: str = "notas"):
 
         del_dialog = ft.AlertDialog(
             modal=True,
-            title=ft.Text("¿Eliminar Evaluación?"),
-            content=ft.Text(f"¿Estás seguro de eliminar '{name}'?"),
+            title=ft.Text("¿Eliminar Evaluación?", weight=ft.FontWeight.BOLD, color=ft.Colors.WHITE),
+            content=ft.Text(f"¿Estás seguro de eliminar '{name}'?", color=ft.Colors.with_opacity(0.85, ft.Colors.WHITE)),
             actions=[
                 ft.TextButton("Cancelar", on_click=lambda _: page.pop_dialog()),
                 ft.FilledButton(
                     "Eliminar",
-                    style=ft.ButtonStyle(bgcolor=AcademixColors.ERROR, color=ft.Colors.WHITE),
+                    style=ft.ButtonStyle(bgcolor=ft.Colors.RED_ACCENT, color=ft.Colors.WHITE),
                     on_click=delete,
                 ),
             ],
         )
         page.show_dialog(del_dialog)
 
+    # ─── Construcción de Tarjeta Individual de Materia ───────────
+    def build_subject_card(sub):
+        sub_color = sub.get("color_hex") or AcademixColors.CYAN_NEON
+        sub_id = sub["id"]
+        evals = sub.get("evaluations", [])
+
+        # Métricas del Motor de Cálculo Adaptativo
+        accum_pts = sub.get("accumulated_points", 0.0)
+        accum_pct = sub.get("accumulated_percent", 0.0)
+        max_scale = sub.get("max_scale", 20.0)
+        passing_grade = sub.get("passing_grade", 10.0)
+        points_needed = sub.get("points_needed_to_pass", 0.0)
+        is_passed = sub.get("is_passed", False)
+        max_possible = sub.get("max_possible_grade", max_scale)
+        req_avg = sub.get("required_average_remaining")
+
+        # Badge de Puntos Reales sobre 20
+        if accum_pct > 0:
+            if is_passed:
+                avg_badge_text = f"⭐ {accum_pts:.2f} / {int(max_scale)} pts (¡Aprobada!)"
+                avg_color = AcademixColors.SUCCESS
+            elif max_possible < passing_grade:
+                avg_badge_text = f"❌ {accum_pts:.2f} / {int(max_scale)} pts (Reprobada)"
+                avg_color = AcademixColors.ERROR
+            elif accum_pts >= passing_grade * 0.7:
+                avg_badge_text = f"🔥 {accum_pts:.2f} / {int(max_scale)} pts (Faltan {points_needed:.2f})"
+                avg_color = AcademixColors.CYAN_NEON
+            else:
+                avg_badge_text = f"⚠️ {accum_pts:.2f} / {int(max_scale)} pts (Faltan {points_needed:.2f})"
+                avg_color = AcademixColors.WARNING
+        else:
+            avg_badge_text = f"0.00 / {int(max_scale)} pts"
+            avg_color = ft.Colors.with_opacity(0.6, ft.Colors.WHITE)
+
+        # Texto descriptivo de proyección
+        if is_passed:
+            projection_desc = f"🎉 ¡Materia superada! Ya acumulaste {accum_pts:.2f} de los {int(passing_grade)} puntos mínimos requeridos."
+            desc_color = AcademixColors.SUCCESS
+        elif max_possible < passing_grade:
+            projection_desc = f"⚠️ Matemáticamente reprobada. Máximo alcanzable: {max_possible:.2f} pts en el {100 - accum_pct:.0f}% restante."
+            desc_color = AcademixColors.ERROR
+        else:
+            req_txt = f" | Requiere promedio de {req_avg:.2f} pts en lo pendiente" if (req_avg is not None and req_avg > 0) else ""
+            projection_desc = f"Faltan {points_needed:.2f} pts para aprobar ({int(passing_grade)} pts). Máx alcanzable: {max_possible:.2f} pts{req_txt}."
+            desc_color = ft.Colors.with_opacity(0.85, ft.Colors.WHITE)
+
+        # Barra de puntos ganados sobre 20
+        pts_flex = max(1, int((accum_pts / max_scale) * 100)) if accum_pts > 0 else 0
+        empty_flex = max(1, 100 - pts_flex)
+
+        # Construir lista de evaluaciones con aporte a la definitiva
+        eval_rows = []
+        if evals:
+            for ev in evals:
+                ev_id = ev["id"]
+                grade_obj = ev.get("grade")
+                score_val = grade_obj.get("score") if grade_obj else None
+                weight = ev.get("weight_percent", 0.0)
+                topic = ev.get("description")
+
+                if score_val is not None:
+                    pts_contrib = round(score_val * (weight / 100.0), 2)
+                    score_pill = ft.Container(
+                        content=ft.Text(f"{score_val:.1f} / {int(max_scale)}", size=12, weight=ft.FontWeight.BOLD, color=AcademixColors.SUCCESS if score_val >= passing_grade else AcademixColors.ERROR),
+                        bgcolor=ft.Colors.with_opacity(0.15, AcademixColors.SUCCESS if score_val >= passing_grade else AcademixColors.ERROR),
+                        padding=ft.Padding(8, 4, 8, 4),
+                        border_radius=8,
+                    )
+                    contrib_pill = ft.Container(
+                        content=ft.Text(f"+{pts_contrib:.2f} pts", size=11, weight=ft.FontWeight.BOLD, color=AcademixColors.CYAN_NEON),
+                        bgcolor=ft.Colors.with_opacity(0.18, AcademixColors.CYAN_NEON),
+                        padding=ft.Padding(8, 4, 8, 4),
+                        border_radius=8,
+                        tooltip="Puntos ganados aportados a la nota final",
+                    )
+                else:
+                    potential = round(max_scale * (weight / 100.0), 2)
+                    score_pill = ft.Container(
+                        content=ft.Text("Pendiente", size=12, color=AcademixColors.WARNING),
+                        bgcolor=ft.Colors.with_opacity(0.15, AcademixColors.WARNING),
+                        padding=ft.Padding(8, 4, 8, 4),
+                        border_radius=8,
+                    )
+                    contrib_pill = ft.Container(
+                        content=ft.Text(f"Hasta +{potential:.2f} pts", size=11, color=ft.Colors.with_opacity(0.65, ft.Colors.WHITE)),
+                        bgcolor=ft.Colors.with_opacity(0.08, ft.Colors.WHITE),
+                        padding=ft.Padding(8, 4, 8, 4),
+                        border_radius=8,
+                        tooltip="Puntos máximos en juego",
+                    )
+
+                title_col = [
+                    ft.Row(
+                        [
+                            ft.Icon(ft.Icons.FACT_CHECK_OUTLINED, size=16, color=sub_color),
+                            ft.Text(ev["name"], size=13, weight=ft.FontWeight.W_500, color=ft.Colors.WHITE),
+                        ],
+                        spacing=8,
+                    )
+                ]
+                if topic:
+                    title_col.append(ft.Text(topic, size=11, color=ft.Colors.with_opacity(0.55, ft.Colors.WHITE), italic=True))
+
+                eval_row = ft.Container(
+                    content=ft.Row(
+                        [
+                            ft.Column(title_col, spacing=2, expand=True),
+                            ft.Container(
+                                content=ft.Text(f"{weight:.0f}%", size=12, weight=ft.FontWeight.BOLD, color=ft.Colors.with_opacity(0.85, ft.Colors.WHITE)),
+                                bgcolor=ft.Colors.with_opacity(0.1, ft.Colors.WHITE),
+                                padding=ft.Padding(8, 4, 8, 4),
+                                border_radius=8,
+                            ),
+                            score_pill,
+                            contrib_pill,
+                            ft.IconButton(
+                                icon=ft.Icons.EDIT_OUTLINED,
+                                icon_size=16,
+                                icon_color=ft.Colors.with_opacity(0.7, ft.Colors.WHITE),
+                                tooltip="Modificar nota o evaluación",
+                                on_click=lambda _, s_id=sub_id, e_obj=ev: open_eval_modal(s_id, e_obj),
+                            ),
+                            ft.IconButton(
+                                icon=ft.Icons.DELETE_OUTLINE,
+                                icon_size=16,
+                                icon_color=ft.Colors.RED_ACCENT,
+                                tooltip="Eliminar evaluación",
+                                on_click=lambda _, s_id=sub_id, e_id=ev_id, e_name=ev["name"]: confirm_delete_eval(s_id, e_id, e_name),
+                            ),
+                        ],
+                        alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
+                        vertical_alignment=ft.CrossAxisAlignment.CENTER,
+                    ),
+                    padding=ft.Padding(12, 8, 12, 8),
+                    border_radius=10,
+                    bgcolor=ft.Colors.with_opacity(0.1, "#0D1B2A"),
+                    border=ft.Border.all(1, ft.Colors.with_opacity(0.08, ft.Colors.WHITE)),
+                )
+                eval_rows.append(eval_row)
+        else:
+            eval_rows.append(
+                ft.Text(
+                    "No has agregado evaluaciones a esta materia. Haz clic en '+ Evaluación' para registrar el primer examen o tarea.",
+                    size=12,
+                    color=ft.Colors.with_opacity(0.5, ft.Colors.WHITE),
+                    italic=True,
+                )
+            )
+
+        # Tarjeta de la Materia
+        card = ft.Container(
+            content=ft.Column(
+                [
+                    # Cabecera de la Materia (Arquitectura Mobile-First en 2 filas limpias)
+                    ft.Column(
+                        [
+                            # Fila 1: Color de la materia + Nombre + Botones de Acción
+                            ft.Row(
+                                [
+                                    ft.Row(
+                                        [
+                                            ft.Container(width=6, height=22, bgcolor=sub_color, border_radius=3),
+                                            ft.Text(sub["name"], size=16, weight=ft.FontWeight.BOLD, color=ft.Colors.WHITE, max_lines=2, overflow=ft.TextOverflow.ELLIPSIS),
+                                        ],
+                                        spacing=8,
+                                        vertical_alignment=ft.CrossAxisAlignment.CENTER,
+                                        expand=True,
+                                    ),
+                                    ft.Row(
+                                        [
+                                            ft.IconButton(
+                                                icon=ft.Icons.EDIT_OUTLINED,
+                                                icon_color=AcademixColors.CYAN_NEON,
+                                                icon_size=18,
+                                                padding=4,
+                                                tooltip="Editar Materia",
+                                                on_click=lambda _, s_obj=sub: open_subject_modal(s_obj),
+                                            ),
+                                            ft.IconButton(
+                                                icon=ft.Icons.DELETE_OUTLINE,
+                                                icon_color=AcademixColors.ERROR,
+                                                icon_size=18,
+                                                padding=4,
+                                                tooltip="Eliminar Materia",
+                                                on_click=lambda _, s_id=sub_id, s_name=sub["name"]: confirm_delete_subject(s_id, s_name),
+                                            ),
+                                        ],
+                                        spacing=0,
+                                        vertical_alignment=ft.CrossAxisAlignment.CENTER,
+                                    ),
+                                ],
+                                alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
+                                vertical_alignment=ft.CrossAxisAlignment.CENTER,
+                            ),
+                            # Fila 2: Badges (Créditos UC + Estado de Calificación / Promedio)
+                            ft.Row(
+                                [
+                                    ft.Container(
+                                        content=ft.Text(f"{sub.get('credits', 0)} UC", size=10, weight=ft.FontWeight.W_600, color=ft.Colors.WHITE),
+                                        bgcolor=ft.Colors.with_opacity(0.15, ft.Colors.WHITE),
+                                        padding=ft.Padding(8, 3, 8, 3),
+                                        border_radius=6,
+                                    ),
+                                    ft.Container(
+                                        content=ft.Text(avg_badge_text, size=11, weight=ft.FontWeight.BOLD, color=avg_color),
+                                        bgcolor=ft.Colors.with_opacity(0.14, avg_color),
+                                        padding=ft.Padding(10, 3, 10, 3),
+                                        border_radius=8,
+                                        border=ft.Border.all(1, ft.Colors.with_opacity(0.35, avg_color)),
+                                    ),
+                                ],
+                                spacing=8,
+                                vertical_alignment=ft.CrossAxisAlignment.CENTER,
+                            ),
+                        ],
+                        spacing=6,
+                    ),
+                    # Barra de Progreso de Puntos Reales Ganados
+                    ft.Column(
+                        [
+                            ft.Row(
+                                [
+                                    ft.Text(f"Puntos Ganados: {accum_pts:.2f} / {int(max_scale)} pts", size=12, weight=ft.FontWeight.BOLD, color=AcademixColors.CYAN_NEON),
+                                    ft.Text(f"Evaluado: {accum_pct:.0f}% de 100%", size=11, color=ft.Colors.with_opacity(0.7, ft.Colors.WHITE)),
+                                ],
+                                alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
+                            ),
+                            ft.Container(
+                                content=ft.Row(
+                                    [
+                                        ft.Container(
+                                            gradient=ft.LinearGradient(
+                                                colors=[sub_color, AcademixColors.SUCCESS if is_passed else AcademixColors.CYAN_NEON]
+                                            ),
+                                            height=6,
+                                            border_radius=3,
+                                            shadow=ft.BoxShadow(blur_radius=8, color=ft.Colors.with_opacity(0.4, sub_color)),
+                                            expand=pts_flex if pts_flex > 0 else 1,
+                                        ),
+                                        ft.Container(
+                                            bgcolor=ft.Colors.with_opacity(0.1, ft.Colors.WHITE),
+                                            height=6,
+                                            border_radius=3,
+                                            expand=empty_flex,
+                                        ),
+                                    ] if pts_flex > 0 else [
+                                        ft.Container(
+                                            bgcolor=ft.Colors.with_opacity(0.1, ft.Colors.WHITE),
+                                            height=6,
+                                            border_radius=3,
+                                            expand=100,
+                                        )
+                                    ],
+                                    spacing=0,
+                                ),
+                            ),
+                            ft.Text(projection_desc, size=11, color=desc_color),
+                        ],
+                        spacing=6,
+                    ),
+                    ft.Divider(color=ft.Colors.with_opacity(0.1, ft.Colors.WHITE), height=14),
+                    # Sub-sección de Evaluaciones
+                    ft.Row(
+                        [
+                            ft.Text("Evaluaciones & Calificaciones:", size=13, weight=ft.FontWeight.W_600, color=ft.Colors.with_opacity(0.85, ft.Colors.WHITE)),
+                            ft.TextButton(
+                                "Evaluación",
+                                icon=ft.Icons.ADD,
+                                on_click=lambda _, s_id=sub_id: check_and_open_eval_modal(s_id),
+                                style=ft.ButtonStyle(color=AcademixColors.CYAN_NEON),
+                            ),
+                        ],
+                        alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
+                    ),
+                    ft.Column(eval_rows, spacing=8),
+                ],
+                spacing=12,
+            ),
+            padding=20,
+            border_radius=18,
+            bgcolor=ft.Colors.with_opacity(0.24, "#0D1B2A"),
+            border=ft.Border.all(1, ft.Colors.with_opacity(0.15, ft.Colors.WHITE)),
+            shadow=ft.BoxShadow(blur_radius=16, color=ft.Colors.with_opacity(0.3, ft.Colors.BLACK), offset=ft.Offset(0, 6)),
+        )
+        return card
+
     # ─── Renderizado de Materias y Evaluaciones ──────────────────
     def render_subjects(subjects):
         subjects_container.controls.clear()
+        subject_cards_map.clear()
 
         if not subjects:
             # Estado Vacío Elegante (Sin Materias Reales aún)
@@ -484,289 +858,9 @@ def SubjectsScreen(page: ft.Page, view_mode: str = "notas"):
 
         # Si hay materias, renderizamos cada tarjeta de materia
         for sub in subjects:
-            sub_color = sub.get("color_hex") or AcademixColors.CYAN_NEON
-            sub_id = sub["id"]
-            evals = sub.get("evaluations", [])
-            
-            # Métricas del Motor de Cálculo Adaptativo
-            accum_pts = sub.get("accumulated_points", 0.0)
-            accum_pct = sub.get("accumulated_percent", 0.0)
-            max_scale = sub.get("max_scale", 20.0)
-            passing_grade = sub.get("passing_grade", 10.0)
-            points_needed = sub.get("points_needed_to_pass", 0.0)
-            is_passed = sub.get("is_passed", False)
-            max_possible = sub.get("max_possible_grade", max_scale)
-            req_avg = sub.get("required_average_remaining")
-
-            # Badge de Puntos Reales sobre 20
-            if accum_pct > 0:
-                if is_passed:
-                    avg_badge_text = f"⭐ {accum_pts:.2f} / {int(max_scale)} pts (¡Aprobada!)"
-                    avg_color = AcademixColors.SUCCESS
-                elif max_possible < passing_grade:
-                    avg_badge_text = f"❌ {accum_pts:.2f} / {int(max_scale)} pts (Reprobada)"
-                    avg_color = AcademixColors.ERROR
-                elif accum_pts >= passing_grade * 0.7:
-                    avg_badge_text = f"🔥 {accum_pts:.2f} / {int(max_scale)} pts (Faltan {points_needed:.2f})"
-                    avg_color = AcademixColors.CYAN_NEON
-                else:
-                    avg_badge_text = f"⚠️ {accum_pts:.2f} / {int(max_scale)} pts (Faltan {points_needed:.2f})"
-                    avg_color = AcademixColors.WARNING
-            else:
-                avg_badge_text = f"0.00 / {int(max_scale)} pts"
-                avg_color = ft.Colors.with_opacity(0.6, ft.Colors.WHITE)
-
-            # Texto descriptivo de proyección
-            if is_passed:
-                projection_desc = f"🎉 ¡Materia superada! Ya acumulaste {accum_pts:.2f} de los {int(passing_grade)} puntos mínimos requeridos."
-                desc_color = AcademixColors.SUCCESS
-            elif max_possible < passing_grade:
-                projection_desc = f"⚠️ Matemáticamente reprobada. Máximo alcanzable: {max_possible:.2f} pts en el {100 - accum_pct:.0f}% restante."
-                desc_color = AcademixColors.ERROR
-            else:
-                req_txt = f" | Requiere promedio de {req_avg:.2f} pts en lo pendiente" if (req_avg is not None and req_avg > 0) else ""
-                projection_desc = f"Faltan {points_needed:.2f} pts para aprobar ({int(passing_grade)} pts). Máx alcanzable: {max_possible:.2f} pts{req_txt}."
-                desc_color = ft.Colors.with_opacity(0.85, ft.Colors.WHITE)
-
-            # Barra de puntos ganados sobre 20
-            pts_flex = max(1, int((accum_pts / max_scale) * 100)) if accum_pts > 0 else 0
-            empty_flex = max(1, 100 - pts_flex)
-
-            # Construir lista de evaluaciones con aporte a la definitiva
-            eval_rows = []
-            if evals:
-                for ev in evals:
-                    ev_id = ev["id"]
-                    grade_obj = ev.get("grade")
-                    score_val = grade_obj.get("score") if grade_obj else None
-                    weight = ev.get("weight_percent", 0.0)
-                    topic = ev.get("description")
-
-                    if score_val is not None:
-                        pts_contrib = round(score_val * (weight / 100.0), 2)
-                        score_pill = ft.Container(
-                            content=ft.Text(f"{score_val:.1f} / {int(max_scale)}", size=12, weight=ft.FontWeight.BOLD, color=AcademixColors.SUCCESS if score_val >= passing_grade else AcademixColors.ERROR),
-                            bgcolor=ft.Colors.with_opacity(0.15, AcademixColors.SUCCESS if score_val >= passing_grade else AcademixColors.ERROR),
-                            padding=ft.Padding(8, 4, 8, 4),
-                            border_radius=8,
-                        )
-                        contrib_pill = ft.Container(
-                            content=ft.Text(f"+{pts_contrib:.2f} pts", size=11, weight=ft.FontWeight.BOLD, color=AcademixColors.CYAN_NEON),
-                            bgcolor=ft.Colors.with_opacity(0.18, AcademixColors.CYAN_NEON),
-                            padding=ft.Padding(8, 4, 8, 4),
-                            border_radius=8,
-                            tooltip="Puntos ganados aportados a la nota final",
-                        )
-                    else:
-                        potential = round(max_scale * (weight / 100.0), 2)
-                        score_pill = ft.Container(
-                            content=ft.Text("Pendiente", size=12, color=AcademixColors.WARNING),
-                            bgcolor=ft.Colors.with_opacity(0.15, AcademixColors.WARNING),
-                            padding=ft.Padding(8, 4, 8, 4),
-                            border_radius=8,
-                        )
-                        contrib_pill = ft.Container(
-                            content=ft.Text(f"Hasta +{potential:.2f} pts", size=11, color=ft.Colors.with_opacity(0.65, ft.Colors.WHITE)),
-                            bgcolor=ft.Colors.with_opacity(0.08, ft.Colors.WHITE),
-                            padding=ft.Padding(8, 4, 8, 4),
-                            border_radius=8,
-                            tooltip="Puntos máximos en juego",
-                        )
-
-                    title_col = [
-                        ft.Row(
-                            [
-                                ft.Icon(ft.Icons.FACT_CHECK_OUTLINED, size=16, color=sub_color),
-                                ft.Text(ev["name"], size=13, weight=ft.FontWeight.W_500, color=ft.Colors.WHITE),
-                            ],
-                            spacing=8,
-                        )
-                    ]
-                    if topic:
-                        title_col.append(ft.Text(topic, size=11, color=ft.Colors.with_opacity(0.55, ft.Colors.WHITE), italic=True))
-
-                    eval_row = ft.Container(
-                        content=ft.Row(
-                            [
-                                ft.Column(title_col, spacing=2, expand=True),
-                                ft.Container(
-                                    content=ft.Text(f"{weight:.0f}%", size=12, weight=ft.FontWeight.BOLD, color=ft.Colors.with_opacity(0.85, ft.Colors.WHITE)),
-                                    bgcolor=ft.Colors.with_opacity(0.1, ft.Colors.WHITE),
-                                    padding=ft.Padding(8, 4, 8, 4),
-                                    border_radius=8,
-                                ),
-                                score_pill,
-                                contrib_pill,
-                                ft.IconButton(
-                                    icon=ft.Icons.EDIT_OUTLINED,
-                                    icon_size=16,
-                                    icon_color=ft.Colors.with_opacity(0.7, ft.Colors.WHITE),
-                                    tooltip="Modificar nota o evaluación",
-                                    on_click=lambda _, s_id=sub_id, e_obj=ev: open_eval_modal(s_id, e_obj),
-                                ),
-                                ft.IconButton(
-                                    icon=ft.Icons.DELETE_OUTLINE,
-                                    icon_size=16,
-                                    icon_color=AcademixColors.ERROR,
-                                    tooltip="Eliminar evaluación",
-                                    on_click=lambda _, e_id=ev_id, e_name=ev["name"]: confirm_delete_eval(e_id, e_name),
-                                ),
-                            ],
-                            alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
-                            vertical_alignment=ft.CrossAxisAlignment.CENTER,
-                        ),
-                        padding=ft.Padding(12, 8, 12, 8),
-                        border_radius=10,
-                        bgcolor=ft.Colors.with_opacity(0.1, "#0D1B2A"),
-                        border=ft.Border.all(1, ft.Colors.with_opacity(0.08, ft.Colors.WHITE)),
-                    )
-                    eval_rows.append(eval_row)
-            else:
-                eval_rows.append(
-                    ft.Text(
-                        "No has agregado evaluaciones a esta materia. Haz clic en '+ Evaluación' para registrar el primer examen o tarea.",
-                        size=12,
-                        color=ft.Colors.with_opacity(0.5, ft.Colors.WHITE),
-                        italic=True,
-                    )
-                )
-
-            # Tarjeta de la Materia
-            card = ft.Container(
-                content=ft.Column(
-                    [
-                        # Cabecera de la Materia (Arquitectura Mobile-First en 2 filas limpias)
-                        ft.Column(
-                            [
-                                # Fila 1: Color de la materia + Nombre + Botones de Acción
-                                ft.Row(
-                                    [
-                                        ft.Row(
-                                            [
-                                                ft.Container(width=6, height=22, bgcolor=sub_color, border_radius=3),
-                                                ft.Text(sub["name"], size=16, weight=ft.FontWeight.BOLD, color=ft.Colors.WHITE, max_lines=2, overflow=ft.TextOverflow.ELLIPSIS),
-                                            ],
-                                            spacing=8,
-                                            vertical_alignment=ft.CrossAxisAlignment.CENTER,
-                                            expand=True,
-                                        ),
-                                        ft.Row(
-                                            [
-                                                ft.IconButton(
-                                                    icon=ft.Icons.EDIT_OUTLINED,
-                                                    icon_color=AcademixColors.CYAN_NEON,
-                                                    icon_size=18,
-                                                    padding=4,
-                                                    tooltip="Editar Materia",
-                                                    on_click=lambda _, s_obj=sub: open_subject_modal(s_obj),
-                                                ),
-                                                ft.IconButton(
-                                                    icon=ft.Icons.DELETE_OUTLINE,
-                                                    icon_color=AcademixColors.ERROR,
-                                                    icon_size=18,
-                                                    padding=4,
-                                                    tooltip="Eliminar Materia",
-                                                    on_click=lambda _, s_id=sub_id, s_name=sub["name"]: confirm_delete_subject(s_id, s_name),
-                                                ),
-                                            ],
-                                            spacing=0,
-                                            vertical_alignment=ft.CrossAxisAlignment.CENTER,
-                                        ),
-                                    ],
-                                    alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
-                                    vertical_alignment=ft.CrossAxisAlignment.CENTER,
-                                ),
-                                # Fila 2: Badges (Créditos UC + Estado de Calificación / Promedio)
-                                ft.Row(
-                                    [
-                                        ft.Container(
-                                            content=ft.Text(f"{sub.get('credits', 0)} UC", size=10, weight=ft.FontWeight.W_600, color=ft.Colors.WHITE),
-                                            bgcolor=ft.Colors.with_opacity(0.15, ft.Colors.WHITE),
-                                            padding=ft.Padding(8, 3, 8, 3),
-                                            border_radius=6,
-                                        ),
-                                        ft.Container(
-                                            content=ft.Text(avg_badge_text, size=11, weight=ft.FontWeight.BOLD, color=avg_color),
-                                            bgcolor=ft.Colors.with_opacity(0.14, avg_color),
-                                            padding=ft.Padding(10, 3, 10, 3),
-                                            border_radius=8,
-                                            border=ft.Border.all(1, ft.Colors.with_opacity(0.35, avg_color)),
-                                        ),
-                                    ],
-                                    spacing=8,
-                                    vertical_alignment=ft.CrossAxisAlignment.CENTER,
-                                ),
-                            ],
-                            spacing=6,
-                        ),
-                        # Barra de Progreso de Puntos Reales Ganados
-                        ft.Column(
-                            [
-                                ft.Row(
-                                    [
-                                        ft.Text(f"Puntos Ganados: {accum_pts:.2f} / {int(max_scale)} pts", size=12, weight=ft.FontWeight.BOLD, color=AcademixColors.CYAN_NEON),
-                                        ft.Text(f"Evaluado: {accum_pct:.0f}% de 100%", size=11, color=ft.Colors.with_opacity(0.7, ft.Colors.WHITE)),
-                                    ],
-                                    alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
-                                ),
-                                ft.Container(
-                                    content=ft.Row(
-                                        [
-                                            ft.Container(
-                                                gradient=ft.LinearGradient(
-                                                    colors=[sub_color, AcademixColors.SUCCESS if is_passed else AcademixColors.CYAN_NEON]
-                                                ),
-                                                height=6,
-                                                border_radius=3,
-                                                shadow=ft.BoxShadow(blur_radius=8, color=ft.Colors.with_opacity(0.4, sub_color)),
-                                                expand=pts_flex if pts_flex > 0 else 1,
-                                            ),
-                                            ft.Container(
-                                                bgcolor=ft.Colors.with_opacity(0.1, ft.Colors.WHITE),
-                                                height=6,
-                                                border_radius=3,
-                                                expand=empty_flex,
-                                            ),
-                                        ] if pts_flex > 0 else [
-                                            ft.Container(
-                                                bgcolor=ft.Colors.with_opacity(0.1, ft.Colors.WHITE),
-                                                height=6,
-                                                border_radius=3,
-                                                expand=100,
-                                            )
-                                        ],
-                                        spacing=0,
-                                    ),
-                                ),
-                                ft.Text(projection_desc, size=11, color=desc_color),
-                            ],
-                            spacing=6,
-                        ),
-                        ft.Divider(color=ft.Colors.with_opacity(0.1, ft.Colors.WHITE), height=14),
-                        # Sub-sección de Evaluaciones
-                        ft.Row(
-                            [
-                                ft.Text("Evaluaciones & Calificaciones:", size=13, weight=ft.FontWeight.W_600, color=ft.Colors.with_opacity(0.85, ft.Colors.WHITE)),
-                                ft.TextButton(
-                                    "Evaluación",
-                                    icon=ft.Icons.ADD,
-                                    on_click=lambda _, s_id=sub_id: open_eval_modal(s_id),
-                                    style=ft.ButtonStyle(color=AcademixColors.CYAN_NEON),
-                                ),
-                            ],
-                            alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
-                        ),
-                        ft.Column(eval_rows, spacing=8),
-                    ],
-                    spacing=12,
-                ),
-                padding=20,
-                border_radius=18,
-                bgcolor=ft.Colors.with_opacity(0.24, "#0D1B2A"),
-                border=ft.Border.all(1, ft.Colors.with_opacity(0.15, ft.Colors.WHITE)),
-                shadow=ft.BoxShadow(blur_radius=16, color=ft.Colors.with_opacity(0.3, ft.Colors.BLACK), offset=ft.Offset(0, 6)),
-            )
-            subjects_container.controls.append(card)
+            card_container = ft.Container(content=build_subject_card(sub))
+            subject_cards_map[sub["id"]] = card_container
+            subjects_container.controls.append(card_container)
 
     # Cargar datos al iniciar
     load_data()

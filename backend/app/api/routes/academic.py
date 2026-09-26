@@ -64,6 +64,15 @@ def delete_subject(
     """Elimina una materia y todas sus evaluaciones."""
     return academic_service.delete_subject(db, current_user, subject_id)
 
+@router.get("/subjects/{subject_id}/evaluations", response_model=List[EvaluationResponse])
+def get_evaluations_by_subject(
+    subject_id: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Lista todas las evaluaciones de una materia específica."""
+    return academic_service.get_subject_evaluations(db, current_user, subject_id)
+
 @router.post("/subjects/{subject_id}/evaluations", response_model=EvaluationResponse, status_code=status.HTTP_201_CREATED)
 def create_evaluation(
     subject_id: str,
@@ -82,6 +91,16 @@ def update_evaluation(
     current_user: User = Depends(get_current_user),
 ):
     """Actualiza una evaluación existente o asigna/modifica su nota."""
+    return academic_service.update_evaluation(db, current_user, eval_id, eval_in)
+
+@router.patch("/evaluations/{eval_id}", response_model=EvaluationResponse)
+def patch_evaluation(
+    eval_id: str,
+    eval_in: EvaluationUpdate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Actualiza parcialmente una evaluación existente."""
     return academic_service.update_evaluation(db, current_user, eval_id, eval_in)
 
 @router.delete("/evaluations/{eval_id}")

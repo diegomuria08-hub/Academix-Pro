@@ -81,6 +81,7 @@ class SubjectCreate(BaseModel):
     max_grade_override: Optional[float] = None
     target_grade: Optional[float] = 20.0
     credits: Optional[int] = 0
+    max_evaluations: Optional[int] = None
     period_id: Optional[str] = None
 
 class SubjectUpdate(BaseModel):
@@ -91,6 +92,7 @@ class SubjectUpdate(BaseModel):
     max_grade_override: Optional[float] = None
     target_grade: Optional[float] = None
     credits: Optional[int] = None
+    max_evaluations: Optional[int] = None
     is_archived: Optional[bool] = None
 
 class SubjectResponse(BaseModel):
@@ -103,6 +105,7 @@ class SubjectResponse(BaseModel):
     max_grade_override: Optional[float] = None
     target_grade: float = 20.0
     credits: int
+    max_evaluations: Optional[int] = None
     is_archived: bool
     # Métricas de Cálculo Adaptativo:
     accumulated_points: float = 0.0          # Ej: 9.40 / 20 pts ganados
