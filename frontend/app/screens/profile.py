@@ -256,5 +256,4 @@ def ProfileScreen(page: ft.Page, focus_settings: bool = False):
             personal_card if focus_settings else settings_card,
         ],
         spacing=0,
-        expand=True,
     )

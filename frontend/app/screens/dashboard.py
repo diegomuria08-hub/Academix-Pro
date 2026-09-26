@@ -359,7 +359,6 @@ def _section_home(page: ft.Page, user_name: str):
     return ft.Column(
         content_children,
         spacing=0,
-        expand=True,
     )
 
 
@@ -850,22 +849,31 @@ def DashboardScreen(page: ft.Page, active_route: str = "dashboard"):
         ("Perfil", ft.Icons.PERSON_OUTLINE, "profile"),
     ]
 
+    # ─── Cache de Vistas en Memoria (Cero recargas innecesarias) ─
+    views_cache = {}
+
     # ─── Generador de Vistas Internas ─────────────────────────
     def get_view(r_name: str):
+        if r_name in views_cache:
+            return views_cache[r_name]
+
         if r_name == "dashboard":
-            return _section_home(page, user_name)
+            v = _section_home(page, user_name)
         elif r_name == "calculator":
-            return _section_calculator(page)
+            v = _section_calculator(page)
         elif r_name == "horario":
-            return ScheduleScreen(page)
+            v = ScheduleScreen(page)
         elif r_name in ["notas", "subjects"]:
-            return SubjectsScreen(page, view_mode="notas")
+            v = SubjectsScreen(page, view_mode="notas")
         elif r_name == "profile":
-            return ProfileScreen(page, focus_settings=False)
+            v = ProfileScreen(page, focus_settings=False)
         elif r_name == "settings":
-            return ProfileScreen(page, focus_settings=True)
+            v = ProfileScreen(page, focus_settings=True)
         else:
-            return _section_home(page, user_name)
+            v = _section_home(page, user_name)
+
+        views_cache[r_name] = v
+        return v
 
     # ─── Botones de Barra Lateral (Tablet / Desktop) ───────────
     def _build_sidebar_btn(label, icon, route_target, is_active):
@@ -898,37 +906,41 @@ def DashboardScreen(page: ft.Page, active_route: str = "dashboard"):
                 on_click=lambda _, r=route_target: switch_tab(r),
             )
 
-    # ─── Botones de Barra Inferior Móvil (Mobile Bottom Bar) ────
+    # ─── Botones de Barra Inferior Móvil (Instantáneos & Zona Táctil Amplia) ────
     def _build_mobile_nav_btn(lbl, ic, r_target, is_active):
-        return ft.GestureDetector(
-            content=ft.Container(
-                content=ft.Column(
-                    [
-                        ft.Icon(
-                            icon=ic,
-                            color=AcademixColors.CYAN_NEON if is_active else ft.Colors.with_opacity(0.55, ft.Colors.WHITE),
-                            size=20,
-                        ),
-                        ft.Text(
-                            lbl,
-                            size=10,
-                            weight=ft.FontWeight.BOLD if is_active else ft.FontWeight.NORMAL,
-                            color=AcademixColors.CYAN_NEON if is_active else ft.Colors.with_opacity(0.55, ft.Colors.WHITE),
-                        ),
-                        ft.Container(
-                            width=14,
-                            height=2,
-                            border_radius=1,
-                            bgcolor=AcademixColors.CYAN_NEON if is_active else ft.Colors.TRANSPARENT,
-                            shadow=ft.BoxShadow(blur_radius=6, color=AcademixColors.CYAN_NEON) if is_active else None,
-                        ),
-                    ],
-                    horizontal_alignment=ft.CrossAxisAlignment.CENTER,
-                    spacing=2,
-                ),
-                padding=ft.Padding(4, 4, 4, 4),
+        return ft.Container(
+            content=ft.Column(
+                [
+                    ft.Icon(
+                        icon=ic,
+                        color=AcademixColors.CYAN_NEON if is_active else ft.Colors.with_opacity(0.55, ft.Colors.WHITE),
+                        size=20,
+                    ),
+                    ft.Text(
+                        lbl,
+                        size=10,
+                        weight=ft.FontWeight.BOLD if is_active else ft.FontWeight.NORMAL,
+                        color=AcademixColors.CYAN_NEON if is_active else ft.Colors.with_opacity(0.55, ft.Colors.WHITE),
+                        max_lines=1,
+                        overflow=ft.TextOverflow.ELLIPSIS,
+                    ),
+                    ft.Container(
+                        width=14,
+                        height=2,
+                        border_radius=1,
+                        bgcolor=AcademixColors.CYAN_NEON if is_active else ft.Colors.TRANSPARENT,
+                        shadow=ft.BoxShadow(blur_radius=6, color=AcademixColors.CYAN_NEON) if is_active else None,
+                    ),
+                ],
+                horizontal_alignment=ft.CrossAxisAlignment.CENTER,
+                alignment=ft.MainAxisAlignment.CENTER,
+                spacing=2,
             ),
-            on_tap=lambda _, rt=r_target: switch_tab(rt),
+            expand=True,
+            padding=ft.Padding(0, 6, 0, 6),
+            ink=True,
+            border_radius=8,
+            on_click=lambda _, rt=r_target: switch_tab(rt),
         )
 
     sidebar_nav_col = ft.Column(
@@ -940,42 +952,54 @@ def DashboardScreen(page: ft.Page, active_route: str = "dashboard"):
         [_build_mobile_nav_btn(lbl, ic, r, r == clean_route or (r == "notas" and clean_route == "subjects")) for lbl, ic, r in mobile_nav_items],
         alignment=ft.MainAxisAlignment.SPACE_AROUND,
         vertical_alignment=ft.CrossAxisAlignment.CENTER,
+        spacing=0,
     )
 
     initial_content = get_view(clean_route)
     mobile_content_col = ft.Column([initial_content], scroll=ft.ScrollMode.AUTO, expand=True)
     tablet_content_col = ft.Column([initial_content], scroll=ft.ScrollMode.AUTO, expand=True)
 
-    # ─── LÓGICA DE TRANSICIÓN INSTANTÁNEA (0ms, SIN PANTALLA NEGRA) ───
+    # ─── LÓGICA DE TRANSICIÓN INSTANTÁNEA (0ms, SIN BLOQUEOS) ───
+    is_switching = [False]
+
     def switch_tab(target_route: str):
-        target = target_route.strip("/") if target_route else "dashboard"
-        if target in ["subjects", "notas"]:
-            norm = "notas"
-        elif target in ["dashboard", "calculator", "horario", "profile", "settings"]:
-            norm = target
-        else:
-            norm = "dashboard"
-
-        current_tab[0] = norm
-        page.route = f"/{norm}"
-
-        new_view = get_view(norm)
-        mobile_content_col.controls = [new_view]
-        tablet_content_col.controls = [new_view]
-
-        mobile_nav_row.controls = [
-            _build_mobile_nav_btn(lbl, ic, r, r == norm or (r == "notas" and norm in ["notas", "subjects"]))
-            for lbl, ic, r in mobile_nav_items
-        ]
-        sidebar_nav_col.controls = [
-            _build_sidebar_btn(lbl, ic, r, r == norm or (r == "notas" and norm in ["notas", "subjects"]))
-            for lbl, ic, r in nav_items
-        ]
-
+        if is_switching[0]:
+            return
+        is_switching[0] = True
         try:
-            page.update()
-        except Exception:
-            pass
+            target = target_route.strip("/") if target_route else "dashboard"
+            if target in ["subjects", "notas"]:
+                norm = "notas"
+            elif target in ["dashboard", "calculator", "horario", "profile", "settings"]:
+                norm = target
+            else:
+                norm = "dashboard"
+
+            if current_tab[0] == norm and mobile_content_col.controls:
+                return
+
+            current_tab[0] = norm
+            page.route = f"/{norm}"
+
+            new_view = get_view(norm)
+            mobile_content_col.controls = [new_view]
+            tablet_content_col.controls = [new_view]
+
+            mobile_nav_row.controls = [
+                _build_mobile_nav_btn(lbl, ic, r, r == norm or (r == "notas" and norm in ["notas", "subjects"]))
+                for lbl, ic, r in mobile_nav_items
+            ]
+            sidebar_nav_col.controls = [
+                _build_sidebar_btn(lbl, ic, r, r == norm or (r == "notas" and norm in ["notas", "subjects"]))
+                for lbl, ic, r in nav_items
+            ]
+
+            try:
+                page.update()
+            except Exception:
+                pass
+        finally:
+            is_switching[0] = False
 
     state.switch_tab = switch_tab
 

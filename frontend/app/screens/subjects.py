@@ -12,14 +12,17 @@ COLOR_PALETTE = [
     ("#2979FF", "Azul Eléctrico"),
 ]
 
+_current_subjects_cache = []
+_is_subjects_fetching = False
+
 def SubjectsScreen(page: ft.Page, view_mode: str = "notas"):
     """
-    Pantalla interactiva con CRUD completo de Materias y Evaluaciones conectado a la Base de Datos MySQL.
+    Pantalla interactiva con CRUD completo de Materias y Evaluaciones conectado a Supabase / PostgreSQL.
     """
     subjects_container = ft.Column(spacing=16)
     loading_ring = ft.ProgressBar(visible=False, color=AcademixColors.CYAN_NEON)
     
-    current_subjects_cache = []
+    current_subjects_cache = _current_subjects_cache
     subject_cards_map = {}
 
     def recalculate_subject_metrics_locally(sub):
@@ -69,33 +72,42 @@ def SubjectsScreen(page: ft.Page, view_mode: str = "notas"):
 
     import threading
 
-    def load_data():
+    def load_data(force: bool = False):
+        global _is_subjects_fetching
+        if _is_subjects_fetching and not force:
+            return
+
         def _fetch():
-            loading_ring.visible = True
-            try:
-                page.update()
-            except Exception:
-                pass
+            global _is_subjects_fetching
+            _is_subjects_fetching = True
+            if not current_subjects_cache:
+                loading_ring.visible = True
+                try:
+                    page.update()
+                except Exception:
+                    pass
             try:
                 resp = api.get_subjects()
                 if resp.status_code == 200:
                     subjects = resp.json()
                     current_subjects_cache.clear()
                     current_subjects_cache.extend(subjects)
+                    state.cached_subjects = current_subjects_cache
                     render_subjects(subjects)
                 else:
                     show_snack("Error al cargar materias de la base de datos", error=True)
             except Exception as ex:
                 show_snack(f"Error de conexión: {ex}", error=True)
             finally:
+                _is_subjects_fetching = False
                 loading_ring.visible = False
                 try:
                     page.update()
                 except Exception:
                     pass
 
-        if current_subjects_cache:
-            render_subjects(current_subjects_cache)
+        # Renderizar al instante con datos en memoria
+        render_subjects(current_subjects_cache)
         threading.Thread(target=_fetch, daemon=True).start()
 
     # ─── Modal para Crear / Editar Materia ───────────────────────
@@ -897,5 +909,4 @@ def SubjectsScreen(page: ft.Page, view_mode: str = "notas"):
             subjects_container,
         ],
         spacing=0,
-        expand=True,
     )

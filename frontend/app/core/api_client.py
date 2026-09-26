@@ -10,7 +10,10 @@ class ApiClient:
     def __new__(cls):
         if cls._instance is None:
             cls._instance = super(ApiClient, cls).__new__(cls)
-            cls._instance.client = httpx.Client(base_url=API_BASE_URL, timeout=45.0)
+            cls._instance.client = httpx.Client(
+                base_url=API_BASE_URL,
+                timeout=httpx.Timeout(20.0, connect=10.0),
+            )
             cls._instance.token = None
         return cls._instance
 

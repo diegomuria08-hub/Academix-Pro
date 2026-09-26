@@ -14,19 +14,24 @@ DAYS_OF_WEEK = [
     (6, "Domingo", "DOM"),
 ]
 
+_classes_cache = []
+_events_cache = []
+_subjects_cache = []
+_is_fetching = False
+
 def ScheduleScreen(page: ft.Page):
     """
     Módulo de Horario y Agenda Académica Inteligente:
-    - Cronograma Semanal de Clases conectado a MySQL.
+    - Cronograma Semanal de Clases conectado a Supabase / PostgreSQL.
     - Agenda de Evaluaciones y Alertas de Recordatorio.
     - Soporte interactivo y Mobile-First con vista de Día y Semana.
     """
     view_mode = ["week"] # "week" o "day"
     selected_day = [datetime.today().weekday()] # 0=Lunes
 
-    classes_cache = []
-    events_cache = []
-    subjects_cache = []
+    classes_cache = _classes_cache
+    events_cache = _events_cache
+    subjects_cache = _subjects_cache
 
     content_container = ft.Column(spacing=16)
     loading_bar = ft.ProgressBar(visible=False, color=AcademixColors.CYAN_NEON)
@@ -40,13 +45,20 @@ def ScheduleScreen(page: ft.Page):
 
     import threading
 
-    def load_data():
+    def load_data(force: bool = False):
+        global _is_fetching
+        if _is_fetching and not force:
+            return
+
         def _fetch():
-            loading_bar.visible = True
-            try:
-                page.update()
-            except Exception:
-                pass
+            global _is_fetching
+            _is_fetching = True
+            if not classes_cache and not events_cache:
+                loading_bar.visible = True
+                try:
+                    page.update()
+                except Exception:
+                    pass
             try:
                 # 1. Cargar materias para los selects
                 r_sub = api.get_subjects()
@@ -70,15 +82,15 @@ def ScheduleScreen(page: ft.Page):
             except Exception as ex:
                 show_snack(f"Error al sincronizar agenda: {ex}", error=True)
             finally:
+                _is_fetching = False
                 loading_bar.visible = False
                 try:
                     page.update()
                 except Exception:
                     pass
 
-        # Si ya hay datos en caché, renderizar al instante
-        if classes_cache or events_cache:
-            render_view()
+        # Renderizar al instante con datos en memoria
+        render_view()
         threading.Thread(target=_fetch, daemon=True).start()
 
     # ─── Modal para Agregar Clase al Horario ───────────────────────
@@ -673,5 +685,4 @@ def ScheduleScreen(page: ft.Page):
             content_container,
         ],
         spacing=0,
-        expand=True,
     )

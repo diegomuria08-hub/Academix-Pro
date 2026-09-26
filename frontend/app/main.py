@@ -28,17 +28,20 @@ def main(page: ft.Page):
             api.set_token(saved_token)
             if saved_user:
                 state.set_user(saved_user)
-            # Validar con el backend sin bloquear ni expulsar si hay problemas de red
-            try:
-                me_resp = api.get_me()
-                if me_resp.status_code == 200:
-                    state.set_user(me_resp.json())
-                elif me_resp.status_code == 401:
-                    # Token realmente expirado o revocado
-                    state.logout()
-            except Exception:
-                # Si Render está en reposo o no hay internet, mantener sesión activa con datos cacheados
-                pass
+            # Validar con el backend en segundo plano sin congelar la app en el arranque
+            import threading
+            def _validate_session():
+                try:
+                    me_resp = api.get_me()
+                    if me_resp.status_code == 200:
+                        state.set_user(me_resp.json())
+                    elif me_resp.status_code == 401:
+                        state.logout()
+                        if page.route not in ["/login", "/register"]:
+                            page.navigate("/login")
+                except Exception:
+                    pass
+            threading.Thread(target=_validate_session, daemon=True).start()
     except Exception:
         pass
 
@@ -53,6 +56,7 @@ def main(page: ft.Page):
                 return
 
             if hasattr(state, "switch_tab") and callable(state.switch_tab) and len(page.views) > 0 and page.views[-1].route not in ["/login", "/register"]:
+                # Si no es la misma ruta, cambiar pestaña
                 state.switch_tab(current)
                 return
 
