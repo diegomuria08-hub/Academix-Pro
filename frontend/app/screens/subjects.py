@@ -28,23 +28,36 @@ def SubjectsScreen(page: ft.Page, view_mode: str = "notas"):
         )
         page.show_dialog(snack)
 
+    import threading
+
     def load_data():
-        loading_ring.visible = True
-        page.update()
-        try:
-            resp = api.get_subjects()
-            if resp.status_code == 200:
-                subjects = resp.json()
-                current_subjects_cache.clear()
-                current_subjects_cache.extend(subjects)
-                render_subjects(subjects)
-            else:
-                show_snack("Error al cargar materias de la base de datos", error=True)
-        except Exception as ex:
-            show_snack(f"Error de conexión: {ex}", error=True)
-        finally:
-            loading_ring.visible = False
-            page.update()
+        def _fetch():
+            loading_ring.visible = True
+            try:
+                page.update()
+            except Exception:
+                pass
+            try:
+                resp = api.get_subjects()
+                if resp.status_code == 200:
+                    subjects = resp.json()
+                    current_subjects_cache.clear()
+                    current_subjects_cache.extend(subjects)
+                    render_subjects(subjects)
+                else:
+                    show_snack("Error al cargar materias de la base de datos", error=True)
+            except Exception as ex:
+                show_snack(f"Error de conexión: {ex}", error=True)
+            finally:
+                loading_ring.visible = False
+                try:
+                    page.update()
+                except Exception:
+                    pass
+
+        if current_subjects_cache:
+            render_subjects(current_subjects_cache)
+        threading.Thread(target=_fetch, daemon=True).start()
 
     # ─── Modal para Crear / Editar Materia ───────────────────────
     def open_subject_modal(subject_to_edit=None):
@@ -622,44 +635,69 @@ def SubjectsScreen(page: ft.Page, view_mode: str = "notas"):
             card = ft.Container(
                 content=ft.Column(
                     [
-                        # Cabecera de la Materia
-                        ft.Row(
+                        # Cabecera de la Materia (Arquitectura Mobile-First en 2 filas limpias)
+                        ft.Column(
                             [
+                                # Fila 1: Color de la materia + Nombre + Botones de Acción
                                 ft.Row(
                                     [
-                                        ft.Container(width=10, height=28, bgcolor=sub_color, border_radius=5),
-                                        ft.Text(sub["name"], size=18, weight=ft.FontWeight.BOLD, color=ft.Colors.WHITE),
-                                        ft.Container(
-                                            content=ft.Text(f"{sub.get('credits', 0)} UC", size=11, color=ft.Colors.WHITE),
-                                            bgcolor=ft.Colors.with_opacity(0.15, ft.Colors.WHITE),
-                                            padding=ft.Padding(6, 2, 6, 2),
-                                            border_radius=6,
+                                        ft.Row(
+                                            [
+                                                ft.Container(width=6, height=22, bgcolor=sub_color, border_radius=3),
+                                                ft.Text(sub["name"], size=16, weight=ft.FontWeight.BOLD, color=ft.Colors.WHITE, max_lines=2, overflow=ft.TextOverflow.ELLIPSIS),
+                                            ],
+                                            spacing=8,
+                                            vertical_alignment=ft.CrossAxisAlignment.CENTER,
+                                            expand=True,
+                                        ),
+                                        ft.Row(
+                                            [
+                                                ft.IconButton(
+                                                    icon=ft.Icons.EDIT_OUTLINED,
+                                                    icon_color=AcademixColors.CYAN_NEON,
+                                                    icon_size=18,
+                                                    padding=4,
+                                                    tooltip="Editar Materia",
+                                                    on_click=lambda _, s_obj=sub: open_subject_modal(s_obj),
+                                                ),
+                                                ft.IconButton(
+                                                    icon=ft.Icons.DELETE_OUTLINE,
+                                                    icon_color=AcademixColors.ERROR,
+                                                    icon_size=18,
+                                                    padding=4,
+                                                    tooltip="Eliminar Materia",
+                                                    on_click=lambda _, s_id=sub_id, s_name=sub["name"]: confirm_delete_subject(s_id, s_name),
+                                                ),
+                                            ],
+                                            spacing=0,
+                                            vertical_alignment=ft.CrossAxisAlignment.CENTER,
                                         ),
                                     ],
-                                    spacing=10,
-                                    expand=True,
+                                    alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
+                                    vertical_alignment=ft.CrossAxisAlignment.CENTER,
                                 ),
-                                ft.Container(
-                                    content=ft.Text(avg_badge_text, size=13, weight=ft.FontWeight.BOLD, color=avg_color),
-                                    bgcolor=ft.Colors.with_opacity(0.14, avg_color),
-                                    padding=ft.Padding(12, 6, 12, 6),
-                                    border_radius=10,
-                                    border=ft.Border.all(1, ft.Colors.with_opacity(0.35, avg_color)),
-                                ),
-                                ft.IconButton(
-                                    icon=ft.Icons.EDIT_NOTE,
-                                    icon_color=AcademixColors.CYAN_NEON,
-                                    tooltip="Editar Materia",
-                                    on_click=lambda _, s_obj=sub: open_subject_modal(s_obj),
-                                ),
-                                ft.IconButton(
-                                    icon=ft.Icons.DELETE_SWEEP_OUTLINED,
-                                    icon_color=AcademixColors.ERROR,
-                                    tooltip="Eliminar Materia",
-                                    on_click=lambda _, s_id=sub_id, s_name=sub["name"]: confirm_delete_subject(s_id, s_name),
+                                # Fila 2: Badges (Créditos UC + Estado de Calificación / Promedio)
+                                ft.Row(
+                                    [
+                                        ft.Container(
+                                            content=ft.Text(f"{sub.get('credits', 0)} UC", size=10, weight=ft.FontWeight.W_600, color=ft.Colors.WHITE),
+                                            bgcolor=ft.Colors.with_opacity(0.15, ft.Colors.WHITE),
+                                            padding=ft.Padding(8, 3, 8, 3),
+                                            border_radius=6,
+                                        ),
+                                        ft.Container(
+                                            content=ft.Text(avg_badge_text, size=11, weight=ft.FontWeight.BOLD, color=avg_color),
+                                            bgcolor=ft.Colors.with_opacity(0.14, avg_color),
+                                            padding=ft.Padding(10, 3, 10, 3),
+                                            border_radius=8,
+                                            border=ft.Border.all(1, ft.Colors.with_opacity(0.35, avg_color)),
+                                        ),
+                                    ],
+                                    spacing=8,
+                                    vertical_alignment=ft.CrossAxisAlignment.CENTER,
                                 ),
                             ],
-                            alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
+                            spacing=6,
                         ),
                         # Barra de Progreso de Puntos Reales Ganados
                         ft.Column(
@@ -710,7 +748,7 @@ def SubjectsScreen(page: ft.Page, view_mode: str = "notas"):
                             [
                                 ft.Text("Evaluaciones & Calificaciones:", size=13, weight=ft.FontWeight.W_600, color=ft.Colors.with_opacity(0.85, ft.Colors.WHITE)),
                                 ft.TextButton(
-                                    "+ Evaluación",
+                                    "Evaluación",
                                     icon=ft.Icons.ADD,
                                     on_click=lambda _, s_id=sub_id: open_eval_modal(s_id),
                                     style=ft.ButtonStyle(color=AcademixColors.CYAN_NEON),

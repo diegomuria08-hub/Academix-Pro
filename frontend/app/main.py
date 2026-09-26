@@ -43,28 +43,35 @@ def main(page: ft.Page):
         pass
 
     def route_change(e):
-        page.views.clear()
         current = page.route.strip("/") if page.route else ""
 
-        if current == "register":
-            page.views.append(
-                ft.View(
-                    route="/register",
-                    controls=[RegisterScreen(page)],
-                    bgcolor=AcademixColors.BG_START,
-                    padding=0,
-                )
-            )
-        elif current in ["dashboard", "calculator", "subjects", "profile", "horario", "notas", "settings"]:
-            # Verificar autenticación
+        # Si el Dashboard ya está montado y navegamos entre pestañas internas, cambiar la pestaña al instante (0ms, sin pantalla negra)
+        if current in ["dashboard", "calculator", "subjects", "profile", "horario", "notas", "settings"]:
             if not state.current_user:
+                page.views.clear()
                 page.navigate("/login")
                 return
+
+            if hasattr(state, "switch_tab") and callable(state.switch_tab) and len(page.views) > 0 and page.views[-1].route not in ["/login", "/register"]:
+                state.switch_tab(current)
+                return
+
+            page.views.clear()
             from app.screens.dashboard import DashboardScreen
             page.views.append(
                 ft.View(
                     route=f"/{current}",
                     controls=[DashboardScreen(page, current)],
+                    bgcolor=AcademixColors.BG_START,
+                    padding=0,
+                )
+            )
+        elif current == "register":
+            page.views.clear()
+            page.views.append(
+                ft.View(
+                    route="/register",
+                    controls=[RegisterScreen(page)],
                     bgcolor=AcademixColors.BG_START,
                     padding=0,
                 )

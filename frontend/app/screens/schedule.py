@@ -38,34 +38,48 @@ def ScheduleScreen(page: ft.Page):
         )
         page.show_dialog(snack)
 
+    import threading
+
     def load_data():
-        loading_bar.visible = True
-        page.update()
-        try:
-            # 1. Cargar materias para los selects
-            r_sub = api.get_subjects()
-            if r_sub.status_code == 200:
-                subjects_cache.clear()
-                subjects_cache.extend(r_sub.json())
+        def _fetch():
+            loading_bar.visible = True
+            try:
+                page.update()
+            except Exception:
+                pass
+            try:
+                # 1. Cargar materias para los selects
+                r_sub = api.get_subjects()
+                if r_sub.status_code == 200:
+                    subjects_cache.clear()
+                    subjects_cache.extend(r_sub.json())
 
-            # 2. Cargar clases del horario
-            r_cls = api.get_classes()
-            if r_cls.status_code == 200:
-                classes_cache.clear()
-                classes_cache.extend(r_cls.json())
+                # 2. Cargar clases del horario
+                r_cls = api.get_classes()
+                if r_cls.status_code == 200:
+                    classes_cache.clear()
+                    classes_cache.extend(r_cls.json())
 
-            # 3. Cargar eventos agendados
-            r_ev = api.get_events()
-            if r_ev.status_code == 200:
-                events_cache.clear()
-                events_cache.extend(r_ev.json())
+                # 3. Cargar eventos agendados
+                r_ev = api.get_events()
+                if r_ev.status_code == 200:
+                    events_cache.clear()
+                    events_cache.extend(r_ev.json())
 
+                render_view()
+            except Exception as ex:
+                show_snack(f"Error al sincronizar agenda: {ex}", error=True)
+            finally:
+                loading_bar.visible = False
+                try:
+                    page.update()
+                except Exception:
+                    pass
+
+        # Si ya hay datos en caché, renderizar al instante
+        if classes_cache or events_cache:
             render_view()
-        except Exception as ex:
-            show_snack(f"Error al sincronizar agenda: {ex}", error=True)
-        finally:
-            loading_bar.visible = False
-            page.update()
+        threading.Thread(target=_fetch, daemon=True).start()
 
     # ─── Modal para Agregar Clase al Horario ───────────────────────
     def open_add_class_modal():

@@ -59,30 +59,31 @@ def _stat_glass_card(title: str, value: str, icon, accent: str, progress: float 
     card_content = [
         ft.Row(
             [
-                ft.Icon(icon=icon, color=accent, size=20),
-                ft.Text(title, size=12, color=ft.Colors.with_opacity(0.7, ft.Colors.WHITE)),
+                ft.Icon(icon=icon, color=accent, size=18),
+                ft.Text(title, size=11, weight=ft.FontWeight.W_500, color=ft.Colors.with_opacity(0.7, ft.Colors.WHITE), max_lines=1, overflow=ft.TextOverflow.ELLIPSIS),
             ],
-            spacing=8,
+            spacing=6,
+            vertical_alignment=ft.CrossAxisAlignment.CENTER,
         ),
-        ft.Text(value, size=28, weight=ft.FontWeight.BOLD, color=ft.Colors.WHITE),
+        ft.Text(value, size=24, weight=ft.FontWeight.BOLD, color=ft.Colors.WHITE),
     ]
 
     if subtitle:
-        card_content.append(ft.Text(subtitle, size=11, color=ft.Colors.with_opacity(0.5, ft.Colors.WHITE)))
+        card_content.append(ft.Text(subtitle, size=10, color=ft.Colors.with_opacity(0.5, ft.Colors.WHITE), max_lines=1, overflow=ft.TextOverflow.ELLIPSIS))
 
     card_content.append(ft.Row(bar_controls, spacing=0))
 
     return ft.Container(
-        content=ft.Column(card_content, spacing=8),
-        padding=18,
-        border_radius=18,
+        content=ft.Column(card_content, spacing=6),
+        padding=14,
+        border_radius=16,
         expand=True,
         bgcolor=ft.Colors.with_opacity(0.25, "#0D1B2A"),
         border=ft.Border.all(1, ft.Colors.with_opacity(0.14, ft.Colors.WHITE)),
         shadow=ft.BoxShadow(
-            blur_radius=20,
+            blur_radius=16,
             color=ft.Colors.with_opacity(0.35, ft.Colors.BLACK),
-            offset=ft.Offset(0, 8),
+            offset=ft.Offset(0, 6),
         ),
     )
 
@@ -90,17 +91,9 @@ def _stat_glass_card(title: str, value: str, icon, accent: str, progress: float 
 # ────────────────────────────────────────────────────────────────
 # VISTA: Inicio / Resumen con DATOS REALES DE LA BASE DE DATOS
 # ────────────────────────────────────────────────────────────────
-def _section_home(page: ft.Page, user_name: str):
-    # Consultar estadísticas reales a la API
-    stats_data = None
-    try:
-        resp = api.get_stats()
-        if resp.status_code == 200:
-            stats_data = resp.json()
-    except Exception:
-        stats_data = None
+_cached_stats_data = None
 
-    # Lógica de Negocio Real:
+def _build_stats_rows(stats_data):
     if stats_data:
         gpa = stats_data.get("gpa")
         max_scale = stats_data.get("max_scale", 20.0)
@@ -111,31 +104,30 @@ def _section_home(page: ft.Page, user_name: str):
         if gpa is not None:
             gpa_text = f"{gpa:.2f}/{int(max_scale)}"
             gpa_prog = min(1.0, gpa / max_scale) if max_scale > 0 else 0.0
-            gpa_sub = "Promedio ponderado acumulado"
+            gpa_sub = "Promedio acumulado"
         else:
             gpa_text = f"--/{int(max_scale)}"
             gpa_prog = 0.0
-            gpa_sub = "Sin notas registradas aún"
+            gpa_sub = "Sin notas aún"
 
         active_text = str(active_count)
-        active_prog = min(1.0, active_count / 8.0)  # Asume máx típico de 8 materias
+        active_prog = min(1.0, active_count / 8.0)
         active_sub = "Materias inscritas"
 
         passed_text = str(passed_count)
         passed_prog = (passed_count / active_count) if active_count > 0 else 0.0
-        passed_sub = f">= {stats_data.get('passing_grade', 10.0):.0f} puntos"
+        passed_sub = f">= {stats_data.get('passing_grade', 10.0):.0f} pts"
 
         failed_text = str(failed_count)
         failed_prog = (failed_count / active_count) if active_count > 0 else 0.0
-        failed_sub = f"< {stats_data.get('passing_grade', 10.0):.0f} puntos"
+        failed_sub = f"< {stats_data.get('passing_grade', 10.0):.0f} pts"
     else:
-        # Estado inicial limpio si no hay conexión o no hay datos
         gpa_text = "--/20"
         gpa_prog = 0.0
-        gpa_sub = "Sin notas registradas aún"
+        gpa_sub = "Sin notas aún"
         active_text = "0"
         active_prog = 0.0
-        active_sub = "Sin materias agregadas"
+        active_sub = "Sin materias"
         passed_text = "0"
         passed_prog = 0.0
         passed_sub = "0 materias"
@@ -144,7 +136,6 @@ def _section_home(page: ft.Page, user_name: str):
         failed_sub = "0 materias"
         active_count = 0
 
-    # 2x2 Grid de estadísticas reales
     row_top = ft.Row(
         [
             _stat_glass_card(
@@ -165,7 +156,7 @@ def _section_home(page: ft.Page, user_name: str):
                 subtitle=active_sub,
             ),
         ],
-        spacing=16,
+        spacing=10,
     )
 
     row_bottom = ft.Row(
@@ -187,43 +178,75 @@ def _section_home(page: ft.Page, user_name: str):
                 subtitle=failed_sub,
             ),
         ],
-        spacing=16,
+        spacing=10,
     )
 
-    # Tarjeta de Bienvenida / Llamado a la Acción si no tiene materias agregadas
-    empty_notice = None
-    if active_count == 0:
-        empty_notice = ft.Container(
-            content=ft.Row(
-                [
-                    ft.Icon(icon=ft.Icons.INFO_OUTLINE, color=AcademixColors.CYAN_NEON, size=24),
-                    ft.Column(
-                        [
-                            ft.Text("Aún no has agregado materias a tu periodo actual", size=13, weight=ft.FontWeight.BOLD, color=ft.Colors.WHITE),
-                            ft.Text("Dirígete a 'Notas' o 'Horario' para registrar tus asignaturas y ver tus cálculos automáticos.", size=11, color=ft.Colors.with_opacity(0.7, ft.Colors.WHITE)),
-                        ],
-                        spacing=2,
-                        expand=True,
-                    ),
-                    ft.FilledButton(
-                        "Agregar Materia",
-                        icon=ft.Icons.ADD,
-                        on_click=lambda _: page.navigate("/notas"),
-                        style=ft.ButtonStyle(
-                            bgcolor=AcademixColors.CYAN_NEON,
-                            color=ft.Colors.BLACK,
-                            shape=ft.RoundedRectangleBorder(radius=10),
+    return row_top, row_bottom, active_count
+
+
+def _section_home(page: ft.Page, user_name: str):
+    import threading
+
+    row_top, row_bottom, active_count = _build_stats_rows(_cached_stats_data)
+    stats_column = ft.Column([row_top, ft.Container(height=8), row_bottom], spacing=0)
+
+    empty_notice_holder = ft.Container()
+
+    def _update_empty_notice(act_count):
+        if act_count == 0:
+            empty_notice_holder.content = ft.Container(
+                content=ft.Row(
+                    [
+                        ft.Icon(icon=ft.Icons.INFO_OUTLINE, color=AcademixColors.CYAN_NEON, size=22),
+                        ft.Column(
+                            [
+                                ft.Text("Aún no has agregado materias a tu periodo actual", size=12, weight=ft.FontWeight.BOLD, color=ft.Colors.WHITE),
+                                ft.Text("Dirígete a 'Notas' para registrar tus asignaturas.", size=11, color=ft.Colors.with_opacity(0.7, ft.Colors.WHITE)),
+                            ],
+                            spacing=2,
+                            expand=True,
                         ),
-                    ),
-                ],
-                alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
-                vertical_alignment=ft.CrossAxisAlignment.CENTER,
-            ),
-            padding=16,
-            border_radius=14,
-            bgcolor=ft.Colors.with_opacity(0.18, "#0D1B2A"),
-            border=ft.Border.all(1, ft.Colors.with_opacity(0.25, AcademixColors.CYAN_NEON)),
-        )
+                        ft.FilledButton(
+                            "Agregar",
+                            icon=ft.Icons.ADD,
+                            on_click=lambda _: state.switch_tab("notas") if hasattr(state, "switch_tab") else page.navigate("/notas"),
+                            style=ft.ButtonStyle(
+                                bgcolor=AcademixColors.CYAN_NEON,
+                                color=ft.Colors.BLACK,
+                                shape=ft.RoundedRectangleBorder(radius=10),
+                                padding=ft.Padding(12, 6, 12, 6),
+                            ),
+                        ),
+                    ],
+                    alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
+                    vertical_alignment=ft.CrossAxisAlignment.CENTER,
+                    spacing=8,
+                ),
+                padding=14,
+                border_radius=14,
+                bgcolor=ft.Colors.with_opacity(0.18, "#0D1B2A"),
+                border=ft.Border.all(1, ft.Colors.with_opacity(0.25, AcademixColors.CYAN_NEON)),
+            )
+            empty_notice_holder.visible = True
+        else:
+            empty_notice_holder.visible = False
+
+    _update_empty_notice(active_count)
+
+    def _fetch_stats_bg():
+        global _cached_stats_data
+        try:
+            resp = api.get_stats()
+            if resp.status_code == 200:
+                _cached_stats_data = resp.json()
+                r_top, r_bot, new_active = _build_stats_rows(_cached_stats_data)
+                stats_column.controls = [r_top, ft.Container(height=8), r_bot]
+                _update_empty_notice(new_active)
+                page.update()
+        except Exception:
+            pass
+
+    threading.Thread(target=_fetch_stats_bg, daemon=True).start()
 
     # Tarjeta: Consejo del día académico (real y coherente)
     advice_card = ft.Container(
@@ -233,38 +256,38 @@ def _section_home(page: ft.Page, user_name: str):
                     content=ft.Icon(
                         icon=ft.Icons.LIGHTBULB_OUTLINE,
                         color=AcademixColors.CYAN_NEON,
-                        size=32,
+                        size=28,
                     ),
                     shadow=ft.BoxShadow(
-                        blur_radius=16,
+                        blur_radius=14,
                         color=ft.Colors.with_opacity(0.6, AcademixColors.CYAN_NEON),
                     ),
-                    padding=ft.Padding(4, 4, 8, 4),
+                    padding=ft.Padding(2, 2, 4, 2),
                 ),
                 ft.Column(
                     [
-                        ft.Text("Consejo Académico del Día", size=14, weight=ft.FontWeight.BOLD, color=ft.Colors.WHITE),
+                        ft.Text("Consejo Académico del Día", size=13, weight=ft.FontWeight.BOLD, color=ft.Colors.WHITE),
                         ft.Text(
                             "Distribuye las ponderaciones de cada corte y anticipa las notas mínimas que necesitas para aprobar con nuestra calculadora.",
-                            size=12,
+                            size=11,
                             color=ft.Colors.with_opacity(0.8, ft.Colors.WHITE),
                         ),
                     ],
-                    spacing=3,
+                    spacing=2,
                     expand=True,
                 ),
             ],
-            spacing=12,
+            spacing=10,
             vertical_alignment=ft.CrossAxisAlignment.CENTER,
         ),
-        padding=18,
-        border_radius=18,
+        padding=14,
+        border_radius=16,
         bgcolor=ft.Colors.with_opacity(0.22, "#0D1B2A"),
         border=ft.Border.all(1, ft.Colors.with_opacity(0.14, ft.Colors.WHITE)),
         shadow=ft.BoxShadow(
-            blur_radius=20,
+            blur_radius=16,
             color=ft.Colors.with_opacity(0.35, ft.Colors.BLACK),
-            offset=ft.Offset(0, 8),
+            offset=ft.Offset(0, 6),
         ),
     )
 
@@ -275,27 +298,24 @@ def _section_home(page: ft.Page, user_name: str):
                 ft.Icon(icon=ft.Icons.CALCULATE_OUTLINED, color=AcademixColors.YELLOW_NEON, size=24),
                 ft.Column(
                     [
-                        ft.Text("Calculadora Predictiva", size=14, weight=ft.FontWeight.BOLD, color=ft.Colors.WHITE),
-                        ft.Text("Simula cuánto necesitas sacar en tus próximos exámenes para aprobar", size=11, color=ft.Colors.with_opacity(0.65, ft.Colors.WHITE)),
+                        ft.Text("Calculadora Predictiva", size=13, weight=ft.FontWeight.BOLD, color=ft.Colors.WHITE),
+                        ft.Text("Simula cuánto necesitas sacar para aprobar", size=11, color=ft.Colors.with_opacity(0.65, ft.Colors.WHITE)),
                     ],
                     spacing=2,
                     expand=True,
                 ),
-                ft.OutlinedButton(
-                    "Calcular",
-                    icon=ft.Icons.ARROW_FORWARD,
-                    on_click=lambda _: page.navigate("/calculator"),
-                    style=ft.ButtonStyle(
-                        bgcolor=ft.Colors.with_opacity(0.2, AcademixColors.CYAN_NEON),
-                        color=AcademixColors.CYAN_NEON,
-                        shape=ft.RoundedRectangleBorder(radius=10),
-                    ),
+                ft.IconButton(
+                    icon=ft.Icons.ARROW_FORWARD_IOS_ROUNDED,
+                    icon_color=AcademixColors.CYAN_NEON,
+                    icon_size=18,
+                    tooltip="Abrir Calculadora",
+                    on_click=lambda _: state.switch_tab("calculator") if hasattr(state, "switch_tab") else page.navigate("/calculator"),
                 ),
             ],
             vertical_alignment=ft.CrossAxisAlignment.CENTER,
-            spacing=12,
+            spacing=10,
         ),
-        padding=16,
+        padding=14,
         border_radius=16,
         bgcolor=ft.Colors.with_opacity(0.18, "#0D1B2A"),
         border=ft.Border.all(1, ft.Colors.with_opacity(0.2, AcademixColors.CYAN_NEON)),
@@ -305,44 +325,36 @@ def _section_home(page: ft.Page, user_name: str):
         # Saludo con nombre real
         ft.Row(
             [
-                ft.Text("¡Hola, ", size=30, weight=ft.FontWeight.BOLD, color=ft.Colors.WHITE),
+                ft.Text("¡Hola, ", size=26, weight=ft.FontWeight.BOLD, color=ft.Colors.WHITE),
                 ft.Text(
                     f"{user_name}!",
-                    size=30,
+                    size=26,
                     weight=ft.FontWeight.BOLD,
                     color=AcademixColors.CYAN_NEON,
                     style=ft.TextStyle(
                         shadow=ft.BoxShadow(
-                            blur_radius=16,
+                            blur_radius=14,
                             color=ft.Colors.with_opacity(0.6, AcademixColors.CYAN_NEON),
                         )
                     ),
                 ),
-                ft.Text(" 👋", size=28),
+                ft.Text(" 👋", size=24),
             ],
             spacing=0,
         ),
         ft.Text(
             "Académix - Asistente y gestor de notas estudiantil",
-            size=13,
+            size=12,
             color=ft.Colors.with_opacity(0.6, ft.Colors.WHITE),
         ),
-        ft.Container(height=12),
-    ]
-
-    if empty_notice:
-        content_children.append(empty_notice)
-        content_children.append(ft.Container(height=12))
-
-    content_children.extend([
-        row_top,
-        ft.Container(height=8),
-        row_bottom,
-        ft.Container(height=12),
+        ft.Container(height=10),
+        empty_notice_holder,
+        stats_column,
+        ft.Container(height=10),
         advice_card,
         ft.Container(height=10),
         quick_calc_card,
-    ])
+    ]
 
     return ft.Column(
         content_children,
@@ -361,13 +373,15 @@ def _section_calculator(page: ft.Page):
     global_pass = float(user_settings.get("passing_grade", 10.0))
     global_total_evals = int(user_settings.get("default_eval_count", 5))
 
-    subjects = []
-    try:
-        resp = api.get_subjects()
-        if resp.status_code == 200:
-            subjects = resp.json()
-    except Exception:
-        subjects = []
+    subjects = getattr(state, "cached_subjects", None) or []
+    if not subjects:
+        try:
+            resp = api.get_subjects()
+            if resp.status_code == 200:
+                subjects = resp.json()
+                state.cached_subjects = subjects
+        except Exception:
+            subjects = []
 
     # ─── Validación Obligatoria: Estado Vacío ───
     if not subjects:
@@ -454,9 +468,9 @@ def _section_calculator(page: ft.Page):
     init_target = float(initial_s.get("target_grade") or init_pass)
 
     # Controles de Entrada (Personalización en Caliente)
-    pass_grade_field = _calc_field("Nota Mínima Aprobatoria", value=str(round(init_pass, 1)), hint_text=f"Ej: {init_pass:.0f}")
-    max_scale_field = _calc_field("Nota Máxima de Escala", value=str(round(init_max, 1)), hint_text=f"Ej: {init_max:.0f}")
-    total_evals_field = _calc_field("Total Evaluaciones Periodo", value=str(global_total_evals), hint_text="Ej: 5")
+    pass_grade_field = _calc_field("Nota Mínima", value=str(round(init_pass, 1)), hint_text=f"Ej: {init_pass:.0f}")
+    max_scale_field = _calc_field("Nota Máxima", value=str(round(init_max, 1)), hint_text=f"Ej: {init_max:.0f}")
+    total_evals_field = _calc_field("Total Evaluaciones", value=str(global_total_evals), hint_text="Ej: 5")
     desired_grade_field = _calc_field("Nota Meta que Deseas", value=str(round(init_target, 1)), hint_text=f"Ej: {init_target:.0f}")
 
     # Resumen Dinámico de Evaluaciones Realizadas
@@ -479,45 +493,50 @@ def _section_calculator(page: ft.Page):
                     ft.Container(
                         content=ft.Row(
                             [
-                                ft.Icon(ft.Icons.CHECK_CIRCLE, color=AcademixColors.SUCCESS, size=16),
-                                ft.Text(f"Realizadas: {n_completed}/{total_e}", size=12, weight=ft.FontWeight.W_600, color=ft.Colors.WHITE),
+                                ft.Icon(ft.Icons.CHECK_CIRCLE, color=AcademixColors.SUCCESS, size=13),
+                                ft.Text(f"Listas: {n_completed}/{total_e}", size=11, weight=ft.FontWeight.W_600, color=ft.Colors.WHITE),
                             ],
-                            spacing=6,
+                            spacing=3,
+                            alignment=ft.MainAxisAlignment.CENTER,
                         ),
                         bgcolor=ft.Colors.with_opacity(0.18, "#0D1B2A"),
-                        padding=ft.Padding(10, 6, 10, 6),
+                        padding=ft.Padding(6, 6, 6, 6),
                         border_radius=8,
                         border=ft.Border.all(1, ft.Colors.with_opacity(0.12, ft.Colors.WHITE)),
+                        expand=1,
                     ),
                     ft.Container(
                         content=ft.Row(
                             [
-                                ft.Icon(ft.Icons.HOURGLASS_EMPTY, color=AcademixColors.WARNING, size=16),
-                                ft.Text(f"Restantes: {n_remaining}", size=12, weight=ft.FontWeight.W_600, color=ft.Colors.WHITE),
+                                ft.Icon(ft.Icons.HOURGLASS_EMPTY, color=AcademixColors.WARNING, size=13),
+                                ft.Text(f"Faltan: {n_remaining}", size=11, weight=ft.FontWeight.W_600, color=ft.Colors.WHITE),
                             ],
-                            spacing=6,
+                            spacing=3,
+                            alignment=ft.MainAxisAlignment.CENTER,
                         ),
                         bgcolor=ft.Colors.with_opacity(0.18, "#0D1B2A"),
-                        padding=ft.Padding(10, 6, 10, 6),
+                        padding=ft.Padding(6, 6, 6, 6),
                         border_radius=8,
                         border=ft.Border.all(1, ft.Colors.with_opacity(0.12, ft.Colors.WHITE)),
+                        expand=1,
                     ),
                     ft.Container(
                         content=ft.Row(
                             [
-                                ft.Icon(ft.Icons.STAR, color=AcademixColors.CYAN_NEON, size=16),
-                                ft.Text(f"Acumulado: {accum_pts:.2f} pts ({eval_pct:.0f}%)", size=12, weight=ft.FontWeight.W_600, color=AcademixColors.CYAN_NEON),
+                                ft.Icon(ft.Icons.STAR, color=AcademixColors.CYAN_NEON, size=13),
+                                ft.Text(f"Acum: {accum_pts:.1f}p", size=11, weight=ft.FontWeight.W_600, color=AcademixColors.CYAN_NEON),
                             ],
-                            spacing=6,
+                            spacing=3,
+                            alignment=ft.MainAxisAlignment.CENTER,
                         ),
                         bgcolor=ft.Colors.with_opacity(0.18, "#0D1B2A"),
-                        padding=ft.Padding(10, 6, 10, 6),
+                        padding=ft.Padding(6, 6, 6, 6),
                         border_radius=8,
                         border=ft.Border.all(1, ft.Colors.with_opacity(0.12, ft.Colors.WHITE)),
+                        expand=1,
                     ),
                 ],
-                wrap=True,
-                spacing=8,
+                spacing=5,
             ),
             padding=ft.Padding(0, 4, 0, 8),
         )
@@ -743,26 +762,33 @@ def _section_calculator(page: ft.Page):
                         ft.Divider(color=ft.Colors.with_opacity(0.12, ft.Colors.WHITE), height=14),
 
                         # 2. Configuración en Caliente
-                        ft.Text("2. Parámetros de Escala y Evaluaciones (Confirmar o Modificar)", size=14, weight=ft.FontWeight.BOLD, color=ft.Colors.WHITE),
-                        ft.Row(
+                        ft.Text("2. Parámetros de Escala y Evaluaciones (Confirmar o Modificar)", size=13, weight=ft.FontWeight.BOLD, color=ft.Colors.WHITE),
+                        ft.Column(
                             [
-                                ft.Container(pass_grade_field, expand=1),
-                                ft.Container(max_scale_field, expand=1),
-                                ft.Container(total_evals_field, expand=1),
+                                ft.Row(
+                                    [
+                                        ft.Container(pass_grade_field, expand=1),
+                                        ft.Container(max_scale_field, expand=1),
+                                    ],
+                                    spacing=10,
+                                ),
+                                ft.Container(total_evals_field),
                             ],
                             spacing=10,
                         ),
                         ft.Divider(color=ft.Colors.with_opacity(0.12, ft.Colors.WHITE), height=14),
 
                         # 3. Definición de la Meta
-                        ft.Text("3. Define tu Meta", size=14, weight=ft.FontWeight.BOLD, color=ft.Colors.WHITE),
-                        ft.Row(
+                        ft.Text("3. Define tu Meta", size=13, weight=ft.FontWeight.BOLD, color=ft.Colors.WHITE),
+                        ft.Column(
                             [
-                                ft.Container(desired_grade_field, expand=2),
-                                ft.Container(quick_pass_btn, expand=1),
+                                desired_grade_field,
+                                ft.Row(
+                                    [quick_pass_btn],
+                                    alignment=ft.MainAxisAlignment.START,
+                                ),
                             ],
-                            spacing=10,
-                            vertical_alignment=ft.CrossAxisAlignment.CENTER,
+                            spacing=8,
                         ),
                         ft.Container(height=8),
 
@@ -787,13 +813,15 @@ def _section_calculator(page: ft.Page):
 
 
 # ────────────────────────────────────────────────────────────────
-# PANTALLA PRINCIPAL: Dashboard Shell (Estética Refinada)
+# PANTALLA PRINCIPAL: Dashboard Shell (Estética Refinada & Instantánea)
 # ────────────────────────────────────────────────────────────────
 def DashboardScreen(page: ft.Page, active_route: str = "dashboard"):
-    # Normalizar ruta activa
+    # Normalizar ruta activa inicial
     clean_route = active_route.strip("/") if active_route else "dashboard"
-    if clean_route == "":
-        clean_route = "dashboard"
+    if clean_route in ["", "subjects"]:
+        clean_route = "notas" if clean_route == "subjects" else "dashboard"
+
+    current_tab = [clean_route]
 
     # Obtener nombre real y avatar real del usuario
     user_name = "Diego"
@@ -804,7 +832,7 @@ def DashboardScreen(page: ft.Page, active_route: str = "dashboard"):
             user_name = p.get("first_name")
         avatar_url = p.get("avatar_url")
 
-    # Definir cada elemento de navegación con su RUTA ÚNICA e independiente
+    # Definir cada elemento de navegación
     nav_items = [
         ("Inicio", ft.Icons.HOME_ROUNDED, "dashboard"),
         ("Horario", ft.Icons.ACCESS_TIME_ROUNDED, "horario"),
@@ -814,14 +842,35 @@ def DashboardScreen(page: ft.Page, active_route: str = "dashboard"):
         ("Configuración", ft.Icons.SETTINGS_OUTLINED, "settings"),
     ]
 
-    # Construir botones de navegación asegurando selección MUTUAMENTE EXCLUSIVA
-    nav_controls = []
-    for label, icon, route_target in nav_items:
-        # Solo se marca si la ruta actual es exactamente esta ruta
-        is_selected = (clean_route == route_target)
+    mobile_nav_items = [
+        ("Inicio", ft.Icons.HOME_ROUNDED, "dashboard"),
+        ("Horario", ft.Icons.ACCESS_TIME_ROUNDED, "horario"),
+        ("Notas", ft.Icons.ARTICLE_OUTLINED, "notas"),
+        ("Calculadora", ft.Icons.CALCULATE_OUTLINED, "calculator"),
+        ("Perfil", ft.Icons.PERSON_OUTLINE, "profile"),
+    ]
 
-        if is_selected:
-            btn = ft.Container(
+    # ─── Generador de Vistas Internas ─────────────────────────
+    def get_view(r_name: str):
+        if r_name == "dashboard":
+            return _section_home(page, user_name)
+        elif r_name == "calculator":
+            return _section_calculator(page)
+        elif r_name == "horario":
+            return ScheduleScreen(page)
+        elif r_name in ["notas", "subjects"]:
+            return SubjectsScreen(page, view_mode="notas")
+        elif r_name == "profile":
+            return ProfileScreen(page, focus_settings=False)
+        elif r_name == "settings":
+            return ProfileScreen(page, focus_settings=True)
+        else:
+            return _section_home(page, user_name)
+
+    # ─── Botones de Barra Lateral (Tablet / Desktop) ───────────
+    def _build_sidebar_btn(label, icon, route_target, is_active):
+        if is_active:
+            return ft.Container(
                 content=ft.Row(
                     [
                         ft.Icon(icon=icon, color=AcademixColors.CYAN_NEON, size=18),
@@ -833,10 +882,10 @@ def DashboardScreen(page: ft.Page, active_route: str = "dashboard"):
                 border_radius=12,
                 bgcolor=ft.Colors.with_opacity(0.22, AcademixColors.CYAN_NEON),
                 border=ft.Border.all(1, ft.Colors.with_opacity(0.35, AcademixColors.CYAN_NEON)),
-                on_click=lambda _, r=route_target: page.navigate(f"/{r}"),
+                on_click=lambda _, r=route_target: switch_tab(r),
             )
         else:
-            btn = ft.Container(
+            return ft.Container(
                 content=ft.Row(
                     [
                         ft.Icon(icon=icon, color=ft.Colors.with_opacity(0.65, ft.Colors.WHITE), size=18),
@@ -846,12 +895,91 @@ def DashboardScreen(page: ft.Page, active_route: str = "dashboard"):
                 ),
                 padding=ft.Padding(14, 10, 14, 10),
                 border_radius=12,
-                on_click=lambda _, r=route_target: page.navigate(f"/{r}"),
+                on_click=lambda _, r=route_target: switch_tab(r),
             )
-        nav_controls.append(btn)
+
+    # ─── Botones de Barra Inferior Móvil (Mobile Bottom Bar) ────
+    def _build_mobile_nav_btn(lbl, ic, r_target, is_active):
+        return ft.GestureDetector(
+            content=ft.Container(
+                content=ft.Column(
+                    [
+                        ft.Icon(
+                            icon=ic,
+                            color=AcademixColors.CYAN_NEON if is_active else ft.Colors.with_opacity(0.55, ft.Colors.WHITE),
+                            size=20,
+                        ),
+                        ft.Text(
+                            lbl,
+                            size=10,
+                            weight=ft.FontWeight.BOLD if is_active else ft.FontWeight.NORMAL,
+                            color=AcademixColors.CYAN_NEON if is_active else ft.Colors.with_opacity(0.55, ft.Colors.WHITE),
+                        ),
+                        ft.Container(
+                            width=14,
+                            height=2,
+                            border_radius=1,
+                            bgcolor=AcademixColors.CYAN_NEON if is_active else ft.Colors.TRANSPARENT,
+                            shadow=ft.BoxShadow(blur_radius=6, color=AcademixColors.CYAN_NEON) if is_active else None,
+                        ),
+                    ],
+                    horizontal_alignment=ft.CrossAxisAlignment.CENTER,
+                    spacing=2,
+                ),
+                padding=ft.Padding(4, 4, 4, 4),
+            ),
+            on_tap=lambda _, rt=r_target: switch_tab(rt),
+        )
+
+    sidebar_nav_col = ft.Column(
+        [_build_sidebar_btn(lbl, ic, r, r == clean_route or (r == "notas" and clean_route == "subjects")) for lbl, ic, r in nav_items],
+        spacing=6,
+    )
+
+    mobile_nav_row = ft.Row(
+        [_build_mobile_nav_btn(lbl, ic, r, r == clean_route or (r == "notas" and clean_route == "subjects")) for lbl, ic, r in mobile_nav_items],
+        alignment=ft.MainAxisAlignment.SPACE_AROUND,
+        vertical_alignment=ft.CrossAxisAlignment.CENTER,
+    )
+
+    initial_content = get_view(clean_route)
+    mobile_content_col = ft.Column([initial_content], scroll=ft.ScrollMode.AUTO, expand=True)
+    tablet_content_col = ft.Column([initial_content], scroll=ft.ScrollMode.AUTO, expand=True)
+
+    # ─── LÓGICA DE TRANSICIÓN INSTANTÁNEA (0ms, SIN PANTALLA NEGRA) ───
+    def switch_tab(target_route: str):
+        target = target_route.strip("/") if target_route else "dashboard"
+        if target in ["subjects", "notas"]:
+            norm = "notas"
+        elif target in ["dashboard", "calculator", "horario", "profile", "settings"]:
+            norm = target
+        else:
+            norm = "dashboard"
+
+        current_tab[0] = norm
+        page.route = f"/{norm}"
+
+        new_view = get_view(norm)
+        mobile_content_col.controls = [new_view]
+        tablet_content_col.controls = [new_view]
+
+        mobile_nav_row.controls = [
+            _build_mobile_nav_btn(lbl, ic, r, r == norm or (r == "notas" and norm in ["notas", "subjects"]))
+            for lbl, ic, r in mobile_nav_items
+        ]
+        sidebar_nav_col.controls = [
+            _build_sidebar_btn(lbl, ic, r, r == norm or (r == "notas" and norm in ["notas", "subjects"]))
+            for lbl, ic, r in nav_items
+        ]
+
+        try:
+            page.update()
+        except Exception:
+            pass
+
+    state.switch_tab = switch_tab
 
     # ─── Logo / Birrete Superior Refinado y Proporcional ──────────
-    # Más compacto, estético y sin el bloque gigante que rompía la jerarquía
     sidebar_brand = ft.Container(
         content=ft.Row(
             [
@@ -894,18 +1022,17 @@ def DashboardScreen(page: ft.Page, active_route: str = "dashboard"):
     )
 
     # ─── Tarjeta Inferior de Usuario con AVATAR REAL O INICIALES ──
-    # Si el usuario NO ha subido foto, muestra sus iniciales reales, NUNCA una foto de stock falsa
     if avatar_url and avatar_url.strip():
         avatar_content = ft.CircleAvatar(
             foreground_image_src=avatar_url.strip(),
-            radius=22,
+            radius=20,
             bgcolor=AcademixColors.PRIMARY,
         )
     else:
         user_initial = user_name[:1].upper() if user_name else "D"
         avatar_content = ft.CircleAvatar(
-            content=ft.Text(user_initial, size=18, weight=ft.FontWeight.BOLD, color=AcademixColors.CYAN_NEON),
-            radius=22,
+            content=ft.Text(user_initial, size=16, weight=ft.FontWeight.BOLD, color=AcademixColors.CYAN_NEON),
+            radius=20,
             bgcolor=ft.Colors.with_opacity(0.3, "#0D1B2A"),
         )
 
@@ -940,7 +1067,7 @@ def DashboardScreen(page: ft.Page, active_route: str = "dashboard"):
         content=ft.Column(
             [
                 sidebar_brand,
-                ft.Column(nav_controls, spacing=6),
+                sidebar_nav_col,
                 ft.Container(expand=True),
                 user_profile_card,
                 ft.Container(height=6),
@@ -952,29 +1079,11 @@ def DashboardScreen(page: ft.Page, active_route: str = "dashboard"):
         padding=ft.Padding(10, 0, 10, 10),
     )
 
-    # ─── Selector de Vista Interna ─────────────────────────────
-    if clean_route == "dashboard":
-        content_view = _section_home(page, user_name)
-    elif clean_route == "calculator":
-        content_view = _section_calculator(page)
-    elif clean_route == "horario":
-        content_view = ScheduleScreen(page)
-    elif clean_route in ["notas", "subjects"]:
-        content_view = SubjectsScreen(page, view_mode="notas")
-    elif clean_route == "profile":
-        content_view = ProfileScreen(page, focus_settings=False)
-    elif clean_route == "settings":
-        content_view = ProfileScreen(page, focus_settings=True)
-    else:
-        content_view = _section_home(page, user_name)
-
     # ─── Detección de Plataforma y Tamaño Responsive ───────────
-    # Móvil Primero: Si width es menor a 768px (o None en el primer frame móvil)
     is_mobile = page.width is None or page.width < 768
 
     # ─── DISPOSICIÓN 1: MÓVIL (Celulares y Tablets en vertical) ─
     if is_mobile:
-        # 1. Barra Superior Móvil (Top App Bar)
         mobile_top_bar = ft.Container(
             content=ft.Row(
                 [
@@ -1011,7 +1120,7 @@ def DashboardScreen(page: ft.Page, active_route: str = "dashboard"):
                         [
                             ft.GestureDetector(
                                 content=avatar_content,
-                                on_tap=lambda _: page.navigate("/profile"),
+                                on_tap=lambda _: switch_tab("profile"),
                             ),
                             ft.IconButton(
                                 icon=ft.Icons.LOGOUT_ROUNDED,
@@ -1033,57 +1142,10 @@ def DashboardScreen(page: ft.Page, active_route: str = "dashboard"):
             border=ft.Border(bottom=ft.BorderSide(1, ft.Colors.with_opacity(0.12, ft.Colors.WHITE))),
         )
 
-        # 2. Barra Inferior de Navegación Móvil (Bottom Navigation Bar)
-        mobile_nav_items = [
-            ("Inicio", ft.Icons.HOME_ROUNDED, "dashboard"),
-            ("Horario", ft.Icons.ACCESS_TIME_ROUNDED, "horario"),
-            ("Notas", ft.Icons.ARTICLE_OUTLINED, "notas"),
-            ("Calculadora", ft.Icons.CALCULATE_OUTLINED, "calculator"),
-            ("Perfil", ft.Icons.PERSON_OUTLINE, "profile"),
-        ]
-
-        def _make_mobile_nav_btn(lbl, ic, r_target):
-            active = (clean_route == r_target or (r_target == "notas" and clean_route == "subjects"))
-            return ft.GestureDetector(
-                content=ft.Container(
-                    content=ft.Column(
-                        [
-                            ft.Icon(
-                                icon=ic,
-                                color=AcademixColors.CYAN_NEON if active else ft.Colors.with_opacity(0.55, ft.Colors.WHITE),
-                                size=20,
-                            ),
-                            ft.Text(
-                                lbl,
-                                size=10,
-                                weight=ft.FontWeight.BOLD if active else ft.FontWeight.NORMAL,
-                                color=AcademixColors.CYAN_NEON if active else ft.Colors.with_opacity(0.55, ft.Colors.WHITE),
-                            ),
-                            # Indicador de luz neón activo
-                            ft.Container(
-                                width=12,
-                                height=2,
-                                border_radius=1,
-                                bgcolor=AcademixColors.CYAN_NEON if active else ft.Colors.TRANSPARENT,
-                                shadow=ft.BoxShadow(blur_radius=6, color=AcademixColors.CYAN_NEON) if active else None,
-                            ),
-                        ],
-                        horizontal_alignment=ft.CrossAxisAlignment.CENTER,
-                        spacing=2,
-                    ),
-                    padding=ft.Padding(4, 4, 4, 4),
-                ),
-                on_tap=lambda _, rt=r_target: page.navigate(f"/{rt}"),
-            )
-
         mobile_bottom_bar = ft.Container(
-            content=ft.Row(
-                [_make_mobile_nav_btn(lbl, ic, r) for lbl, ic, r in mobile_nav_items],
-                alignment=ft.MainAxisAlignment.SPACE_AROUND,
-                vertical_alignment=ft.CrossAxisAlignment.CENTER,
-            ),
-            padding=ft.Padding(4, 6, 4, 6),
-            bgcolor=ft.Colors.with_opacity(0.75, "#0A1322"),
+            content=mobile_nav_row,
+            padding=ft.Padding(4, 6, 4, 12),
+            bgcolor=ft.Colors.with_opacity(0.85, "#0A1322"),
             border=ft.Border(top=ft.BorderSide(1, ft.Colors.with_opacity(0.18, ft.Colors.WHITE))),
             shadow=ft.BoxShadow(
                 blur_radius=20,
@@ -1092,13 +1154,8 @@ def DashboardScreen(page: ft.Page, active_route: str = "dashboard"):
             ),
         )
 
-        # 3. Contenedor de Contenido Principal a Ancho Completo
         mobile_main_container = ft.Container(
-            content=ft.Column(
-                [content_view],
-                scroll=ft.ScrollMode.AUTO,
-                expand=True,
-            ),
+            content=mobile_content_col,
             padding=ft.Padding(12, 12, 12, 12),
             expand=True,
         )
@@ -1128,11 +1185,7 @@ def DashboardScreen(page: ft.Page, active_route: str = "dashboard"):
 
     # ─── DISPOSICIÓN 2: TABLETS HORIZONTALES Y PANTALLAS ANCHAS ─
     main_glass_panel = ft.Container(
-        content=ft.Column(
-            [content_view],
-            scroll=ft.ScrollMode.AUTO,
-            expand=True,
-        ),
+        content=tablet_content_col,
         expand=True,
         padding=24,
         border_radius=24,
