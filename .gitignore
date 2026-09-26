@@ -1,0 +1,27 @@
+# Entorno virtual y dependencias
+venv/
+env/
+ENV/
+.venv/
+
+# Variables de entorno y secretos (NUNCA SUBIR A GITHUB)
+.env
+backend/.env
+*.env
+*.env.local
+
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# IDEs y editores
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Postman / Scratch / Temporales
+.postman/
+*.log
+scratch/
