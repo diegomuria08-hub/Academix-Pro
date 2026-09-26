@@ -25,3 +25,9 @@ __pycache__/
 .postman/
 *.log
 scratch/
+
+# Flutter / Flet build outputs
+frontend/build/
+build/
+*.apk
+.dart_tool/

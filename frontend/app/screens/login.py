@@ -94,11 +94,20 @@ def LoginScreen(page: ft.Page):
                 if me.status_code == 200:
                     state.set_user(me.json())
                 page.navigate("/dashboard")
-            else:
+            elif resp.status_code in (400, 401):
                 error_text.value = "Usuario o contraseña incorrectos"
                 error_text.visible = True
-        except Exception:
-            error_text.value = "Error al conectar con el servidor"
+            else:
+                error_text.value = f"Error del servidor ({resp.status_code}). Intenta de nuevo."
+                error_text.visible = True
+        except Exception as ex:
+            ex_str = str(ex).lower()
+            if "timeout" in ex_str:
+                error_text.value = "El servidor está iniciando (Render despierta tras reposo). Espera unos 15 segundos y reintenta."
+            elif "connect" in ex_str or "network" in ex_str:
+                error_text.value = "Error de red. Verifica tu conexión a internet."
+            else:
+                error_text.value = "Error al conectar con el servidor. Reintentando..."
             error_text.visible = True
         finally:
             loading_indicator.visible = False
