@@ -633,10 +633,10 @@ def ScheduleScreen(page: ft.Page):
                 [
                     ft.Column(
                         [
-                            ft.Text("Agenda y Horario Académico ⏰", size=24, weight=ft.FontWeight.BOLD, color=ft.Colors.WHITE),
-                            ft.Text("Gestiona tus clases semanales y programa alertas previas a tus exámenes.", size=13, color=ft.Colors.with_opacity(0.6, ft.Colors.WHITE)),
+                            ft.Text("Agenda y Horario ⏰", size=19, weight=ft.FontWeight.BOLD, color=ft.Colors.WHITE),
+                            ft.Text("Clases semanales y alertas de evaluaciones", size=12, color=ft.Colors.with_opacity(0.6, ft.Colors.WHITE)),
                         ],
-                        spacing=4,
+                        spacing=2,
                         expand=True,
                     ),
                     ft.FilledButton(
@@ -646,8 +646,8 @@ def ScheduleScreen(page: ft.Page):
                         style=ft.ButtonStyle(
                             bgcolor=AcademixColors.CYAN_NEON,
                             color=ft.Colors.BLACK,
-                            shape=ft.RoundedRectangleBorder(radius=12),
-                            padding=ft.Padding(16, 10, 16, 10),
+                            shape=ft.RoundedRectangleBorder(radius=10),
+                            padding=ft.Padding(12, 8, 12, 8),
                         ),
                     ),
                 ],

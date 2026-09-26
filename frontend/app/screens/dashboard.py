@@ -968,7 +968,165 @@ def DashboardScreen(page: ft.Page, active_route: str = "dashboard"):
     else:
         content_view = _section_home(page, user_name)
 
-    # ─── Panel de Vidrio Principal Derecho (Gran Tarjeta) ──────
+    # ─── Detección de Plataforma y Tamaño Responsive ───────────
+    # Móvil Primero: Si width es menor a 768px (o None en el primer frame móvil)
+    is_mobile = page.width is None or page.width < 768
+
+    # ─── DISPOSICIÓN 1: MÓVIL (Celulares y Tablets en vertical) ─
+    if is_mobile:
+        # 1. Barra Superior Móvil (Top App Bar)
+        mobile_top_bar = ft.Container(
+            content=ft.Row(
+                [
+                    ft.Row(
+                        [
+                            ft.Container(
+                                content=ft.Icon(icon=ft.Icons.SCHOOL_ROUNDED, color=AcademixColors.CYAN_NEON, size=20),
+                                width=32,
+                                height=32,
+                                border_radius=8,
+                                bgcolor=ft.Colors.with_opacity(0.18, "#0D1B2A"),
+                                border=ft.Border.all(1.2, AcademixColors.CYAN_NEON),
+                                alignment=ft.Alignment.CENTER,
+                                shadow=ft.BoxShadow(blur_radius=8, color=ft.Colors.with_opacity(0.4, AcademixColors.CYAN_NEON)),
+                            ),
+                            ft.Row(
+                                [
+                                    ft.Text("ACADÉMIX", size=13, weight=ft.FontWeight.W_900, color=ft.Colors.WHITE),
+                                    ft.Container(
+                                        content=ft.Text("PRO", size=8, weight=ft.FontWeight.BOLD, color=AcademixColors.CYAN_NEON),
+                                        padding=ft.Padding(3, 1, 3, 1),
+                                        border_radius=4,
+                                        bgcolor=ft.Colors.with_opacity(0.2, AcademixColors.CYAN_NEON),
+                                    ),
+                                ],
+                                spacing=3,
+                                vertical_alignment=ft.CrossAxisAlignment.CENTER,
+                            ),
+                        ],
+                        spacing=8,
+                        vertical_alignment=ft.CrossAxisAlignment.CENTER,
+                    ),
+                    ft.Row(
+                        [
+                            ft.GestureDetector(
+                                content=avatar_content,
+                                on_tap=lambda _: page.navigate("/profile"),
+                            ),
+                            ft.IconButton(
+                                icon=ft.Icons.LOGOUT_ROUNDED,
+                                icon_color=ft.Colors.with_opacity(0.7, ft.Colors.WHITE),
+                                icon_size=18,
+                                tooltip="Cerrar Sesión",
+                                on_click=lambda _: [state.logout(), page.navigate("/login")],
+                            ),
+                        ],
+                        spacing=4,
+                        vertical_alignment=ft.CrossAxisAlignment.CENTER,
+                    ),
+                ],
+                alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
+                vertical_alignment=ft.CrossAxisAlignment.CENTER,
+            ),
+            padding=ft.Padding(14, 10, 14, 10),
+            bgcolor=ft.Colors.with_opacity(0.45, "#0D1B2A"),
+            border=ft.Border(bottom=ft.BorderSide(1, ft.Colors.with_opacity(0.12, ft.Colors.WHITE))),
+        )
+
+        # 2. Barra Inferior de Navegación Móvil (Bottom Navigation Bar)
+        mobile_nav_items = [
+            ("Inicio", ft.Icons.HOME_ROUNDED, "dashboard"),
+            ("Horario", ft.Icons.ACCESS_TIME_ROUNDED, "horario"),
+            ("Notas", ft.Icons.ARTICLE_OUTLINED, "notas"),
+            ("Calculadora", ft.Icons.CALCULATE_OUTLINED, "calculator"),
+            ("Perfil", ft.Icons.PERSON_OUTLINE, "profile"),
+        ]
+
+        def _make_mobile_nav_btn(lbl, ic, r_target):
+            active = (clean_route == r_target or (r_target == "notas" and clean_route == "subjects"))
+            return ft.GestureDetector(
+                content=ft.Container(
+                    content=ft.Column(
+                        [
+                            ft.Icon(
+                                icon=ic,
+                                color=AcademixColors.CYAN_NEON if active else ft.Colors.with_opacity(0.55, ft.Colors.WHITE),
+                                size=20,
+                            ),
+                            ft.Text(
+                                lbl,
+                                size=10,
+                                weight=ft.FontWeight.BOLD if active else ft.FontWeight.NORMAL,
+                                color=AcademixColors.CYAN_NEON if active else ft.Colors.with_opacity(0.55, ft.Colors.WHITE),
+                            ),
+                            # Indicador de luz neón activo
+                            ft.Container(
+                                width=12,
+                                height=2,
+                                border_radius=1,
+                                bgcolor=AcademixColors.CYAN_NEON if active else ft.Colors.TRANSPARENT,
+                                shadow=ft.BoxShadow(blur_radius=6, color=AcademixColors.CYAN_NEON) if active else None,
+                            ),
+                        ],
+                        horizontal_alignment=ft.CrossAxisAlignment.CENTER,
+                        spacing=2,
+                    ),
+                    padding=ft.Padding(4, 4, 4, 4),
+                ),
+                on_tap=lambda _, rt=r_target: page.navigate(f"/{rt}"),
+            )
+
+        mobile_bottom_bar = ft.Container(
+            content=ft.Row(
+                [_make_mobile_nav_btn(lbl, ic, r) for lbl, ic, r in mobile_nav_items],
+                alignment=ft.MainAxisAlignment.SPACE_AROUND,
+                vertical_alignment=ft.CrossAxisAlignment.CENTER,
+            ),
+            padding=ft.Padding(4, 6, 4, 6),
+            bgcolor=ft.Colors.with_opacity(0.75, "#0A1322"),
+            border=ft.Border(top=ft.BorderSide(1, ft.Colors.with_opacity(0.18, ft.Colors.WHITE))),
+            shadow=ft.BoxShadow(
+                blur_radius=20,
+                color=ft.Colors.with_opacity(0.6, ft.Colors.BLACK),
+                offset=ft.Offset(0, -4),
+            ),
+        )
+
+        # 3. Contenedor de Contenido Principal a Ancho Completo
+        mobile_main_container = ft.Container(
+            content=ft.Column(
+                [content_view],
+                scroll=ft.ScrollMode.AUTO,
+                expand=True,
+            ),
+            padding=ft.Padding(12, 12, 12, 12),
+            expand=True,
+        )
+
+        return ft.Stack(
+            [
+                ft.Container(
+                    expand=True,
+                    gradient=ft.LinearGradient(
+                        begin=ft.Alignment.TOP_LEFT,
+                        end=ft.Alignment.BOTTOM_RIGHT,
+                        colors=[AcademixColors.BG_START, AcademixColors.BG_END],
+                    ),
+                ),
+                ft.Column(
+                    [
+                        mobile_top_bar,
+                        mobile_main_container,
+                        mobile_bottom_bar,
+                    ],
+                    spacing=0,
+                    expand=True,
+                ),
+            ],
+            expand=True,
+        )
+
+    # ─── DISPOSICIÓN 2: TABLETS HORIZONTALES Y PANTALLAS ANCHAS ─
     main_glass_panel = ft.Container(
         content=ft.Column(
             [content_view],
@@ -976,7 +1134,7 @@ def DashboardScreen(page: ft.Page, active_route: str = "dashboard"):
             expand=True,
         ),
         expand=True,
-        padding=28,
+        padding=24,
         border_radius=24,
         bgcolor=ft.Colors.with_opacity(0.28, "#0D1B2A"),
         border=ft.Border.all(1, ft.Colors.with_opacity(0.16, ft.Colors.WHITE)),
@@ -988,7 +1146,6 @@ def DashboardScreen(page: ft.Page, active_route: str = "dashboard"):
         ),
     )
 
-    # ─── Fondo General Profundo con Resplandor Neón ────────────
     return ft.Stack(
         [
             ft.Container(
@@ -1005,10 +1162,10 @@ def DashboardScreen(page: ft.Page, active_route: str = "dashboard"):
                         sidebar,
                         main_glass_panel,
                     ],
-                    spacing=20,
+                    spacing=16,
                     expand=True,
                 ),
-                padding=20,
+                padding=16,
                 expand=True,
             ),
         ],

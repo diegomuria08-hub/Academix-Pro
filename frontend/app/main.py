@@ -21,26 +21,24 @@ def main(page: ft.Page):
 
     state.page = page
 
-    # Restaurar sesión persistida (LocalStorage del navegador / app móvil)
+    # Restaurar sesión persistida (Archivo local privado + ClientStorage)
     try:
-        saved_token = page.client_storage.get("token")
-        if not saved_token:
-            saved_token = page.session.store.get("token")
+        saved_token, saved_user = state.load_session()
         if saved_token:
             api.set_token(saved_token)
-            me_resp = api.get_me()
-            if me_resp.status_code == 200:
-                state.set_user(me_resp.json())
-            else:
-                api.clear_token()
-                try:
-                    page.client_storage.remove("token")
-                except Exception:
-                    pass
-                try:
-                    page.session.store.remove("token")
-                except Exception:
-                    pass
+            if saved_user:
+                state.set_user(saved_user)
+            # Validar con el backend sin bloquear ni expulsar si hay problemas de red
+            try:
+                me_resp = api.get_me()
+                if me_resp.status_code == 200:
+                    state.set_user(me_resp.json())
+                elif me_resp.status_code == 401:
+                    # Token realmente expirado o revocado
+                    state.logout()
+            except Exception:
+                # Si Render está en reposo o no hay internet, mantener sesión activa con datos cacheados
+                pass
     except Exception:
         pass
 

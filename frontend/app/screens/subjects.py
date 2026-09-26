@@ -739,21 +739,21 @@ def SubjectsScreen(page: ft.Page, view_mode: str = "notas"):
                 [
                     ft.Column(
                         [
-                            ft.Text("Gestión de Notas y Calificaciones 📝", size=24, weight=ft.FontWeight.BOLD, color=ft.Colors.WHITE),
-                            ft.Text("Monitorea los puntos reales ganados sobre 20 y las notas necesarias para aprobar.", size=13, color=ft.Colors.with_opacity(0.6, ft.Colors.WHITE)),
+                            ft.Text("Notas & Asignaturas 📝", size=19, weight=ft.FontWeight.BOLD, color=ft.Colors.WHITE),
+                            ft.Text("Puntos acumulados y metas por materia", size=12, color=ft.Colors.with_opacity(0.6, ft.Colors.WHITE)),
                         ],
-                        spacing=4,
+                        spacing=2,
                         expand=True,
                     ),
                     ft.FilledButton(
-                        "+ Nueva Materia",
+                        "+ Materia",
                         icon=ft.Icons.ADD_ROUNDED,
                         on_click=lambda _: open_subject_modal(),
                         style=ft.ButtonStyle(
                             bgcolor=AcademixColors.CYAN_NEON,
                             color=ft.Colors.BLACK,
-                            shape=ft.RoundedRectangleBorder(radius=12),
-                            padding=ft.Padding(18, 12, 18, 12),
+                            shape=ft.RoundedRectangleBorder(radius=10),
+                            padding=ft.Padding(12, 8, 12, 8),
                         ),
                     ),
                 ],

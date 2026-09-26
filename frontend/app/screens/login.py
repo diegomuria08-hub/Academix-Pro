@@ -78,21 +78,17 @@ def LoginScreen(page: ft.Page):
             if resp.status_code == 200:
                 data = resp.json()
                 token = data["access_token"]
-                api.set_token(token)
+                me_data = None
+                try:
+                    api.set_token(token)
+                    me_resp = api.get_me()
+                    if me_resp.status_code == 200:
+                        me_data = me_resp.json()
+                except Exception:
+                    pass
                 
-                # Persistencia Permanente en LocalStorage del Cliente/Dispositivo
-                try:
-                    page.client_storage.set("token", token)
-                except Exception:
-                    pass
-                try:
-                    page.session.store.set("token", token)
-                except Exception:
-                    pass
-
-                me = api.get_me()
-                if me.status_code == 200:
-                    state.set_user(me.json())
+                # Persistencia permanente reforzada
+                state.save_session(token, me_data)
                 page.navigate("/dashboard")
             elif resp.status_code in (400, 401):
                 error_text.value = "Usuario o contraseña incorrectos"
