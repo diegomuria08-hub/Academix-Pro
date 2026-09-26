@@ -1,2 +1,8 @@
 flet
 httpx>=0.27.0
+certifi
+idna
+sniffio
+h11
+anyio
+httpcore
