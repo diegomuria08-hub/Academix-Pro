@@ -201,23 +201,29 @@ def ScheduleScreen(page: ft.Page):
 
         add_dialog = ft.AlertDialog(
             modal=True,
-            title=ft.Text("Agregar Clase al Horario 📅", weight=ft.FontWeight.BOLD, color=ft.Colors.WHITE),
+            title=ft.Row(
+                [
+                    ft.Icon(ft.Icons.CALENDAR_MONTH_ROUNDED, color=AcademixColors.CYAN_NEON, size=22),
+                    ft.Text("Agregar Clase al Horario", weight=ft.FontWeight.BOLD, color=ft.Colors.WHITE, size=17),
+                ],
+                spacing=8,
+            ),
             content=ft.Container(
                 content=ft.Column(
                     [
                         modal_error,
                         subject_dd,
                         day_dd,
-                        ft.Row([ft.Container(start_time_field, expand=1), ft.Container(end_time_field, expand=1)], spacing=10),
+                        ft.Row([ft.Container(start_time_field, expand=1), ft.Container(end_time_field, expand=1)], spacing=8),
                         classroom_field,
                         professor_field,
                     ],
                     spacing=12,
                     scroll=ft.ScrollMode.ADAPTIVE,
                 ),
-                width=380,
-                height=320,
-                padding=10,
+                width=330,
+                height=330,
+                padding=6,
             ),
             actions=[
                 ft.TextButton("Cancelar", on_click=lambda _: page.pop_dialog()),
@@ -255,8 +261,7 @@ def ScheduleScreen(page: ft.Page):
             value=subject_options[0].key,
             filled=True,
             bgcolor="#0F1E36",
-            focused_bgcolor="#142644",
-            fill_color="#0F1E36",
+            border=ft.OutlineInputBorder(border_radius=12, side=ft.BorderSide(color=AcademixColors.CYAN_NEON, width=1.2)),
             color=ft.Colors.WHITE,
         )
 
@@ -309,8 +314,7 @@ def ScheduleScreen(page: ft.Page):
             value="24",
             filled=True,
             bgcolor="#0F1E36",
-            focused_bgcolor="#142644",
-            fill_color="#0F1E36",
+            border=ft.OutlineInputBorder(border_radius=12, side=ft.BorderSide(color=ft.Colors.with_opacity(0.3, ft.Colors.WHITE), width=1)),
             color=ft.Colors.WHITE,
         )
 
@@ -361,7 +365,13 @@ def ScheduleScreen(page: ft.Page):
 
         event_dialog = ft.AlertDialog(
             modal=True,
-            title=ft.Text("Agendar Evaluación / Recordatorio 🔔", weight=ft.FontWeight.BOLD, color=ft.Colors.WHITE),
+            title=ft.Row(
+                [
+                    ft.Icon(ft.Icons.NOTIFICATIONS_ACTIVE_ROUNDED, color=AcademixColors.YELLOW_NEON, size=22),
+                    ft.Text("Agendar Evaluación", weight=ft.FontWeight.BOLD, color=ft.Colors.WHITE, size=17),
+                ],
+                spacing=8,
+            ),
             content=ft.Container(
                 content=ft.Column(
                     [
@@ -369,15 +379,15 @@ def ScheduleScreen(page: ft.Page):
                         subject_dd,
                         title_field,
                         topic_field,
-                        ft.Row([ft.Container(date_field, expand=1), ft.Container(time_field, expand=1)], spacing=10),
+                        ft.Row([ft.Container(date_field, expand=1), ft.Container(time_field, expand=1)], spacing=8),
                         reminder_dd,
                     ],
                     spacing=12,
                     scroll=ft.ScrollMode.ADAPTIVE,
                 ),
-                width=380,
+                width=330,
                 height=350,
-                padding=10,
+                padding=6,
             ),
             actions=[
                 ft.TextButton("Cancelar", on_click=lambda _: page.pop_dialog()),
@@ -385,7 +395,7 @@ def ScheduleScreen(page: ft.Page):
                     "Agendar Evaluación",
                     on_click=save_event,
                     style=ft.ButtonStyle(
-                        bgcolor=AcademixColors.CYAN_NEON,
+                        bgcolor=AcademixColors.YELLOW_NEON,
                         color=ft.Colors.BLACK,
                         shape=ft.RoundedRectangleBorder(radius=10),
                     ),
@@ -630,7 +640,7 @@ def ScheduleScreen(page: ft.Page):
                             ft.Row(
                                 [
                                     ft.Icon(ft.Icons.EVENT_NOTE_OUTLINED, color=AcademixColors.YELLOW_NEON, size=24),
-                                    ft.Text("No tienes evaluaciones agendadas próximas.", size=13, weight=ft.FontWeight.W_500, color=ft.Colors.WHITE),
+                                    ft.Text("No tienes evaluaciones agendadas próximas.", size=13, weight=ft.FontWeight.W_500, color=ft.Colors.WHITE, expand=True),
                                 ],
                                 spacing=10,
                             ),
@@ -714,29 +724,44 @@ def ScheduleScreen(page: ft.Page):
             ft.Column(class_cards, spacing=10),
             ft.Container(height=16),
             ft.Divider(color=ft.Colors.with_opacity(0.12, ft.Colors.WHITE), height=10),
-            # Próximas Evaluaciones y Alertas
-            ft.Row(
-                [
-                    ft.Row(
-                        [
-                            ft.Icon(ft.Icons.ALARM, color=AcademixColors.YELLOW_NEON, size=20),
-                            ft.Text("Agenda de Evaluaciones & Recordatorios 🔔", size=16, weight=ft.FontWeight.BOLD, color=ft.Colors.WHITE),
-                        ],
-                        spacing=8,
-                        expand=True,
-                    ),
-                    ft.FilledButton(
-                        "Agendar",
-                        icon=ft.Icons.ADD_ALERT_OUTLINED,
-                        on_click=lambda _: open_add_event_modal(),
-                        style=ft.ButtonStyle(
-                            bgcolor=ft.Colors.with_opacity(0.2, AcademixColors.YELLOW_NEON),
-                            color=AcademixColors.YELLOW_NEON,
-                            shape=ft.RoundedRectangleBorder(radius=10),
+            # Próximas Evaluaciones y Alertas (100% Mobile-first responsive)
+            ft.Container(
+                content=ft.Column(
+                    [
+                        ft.Row(
+                            [
+                                ft.Row(
+                                    [
+                                        ft.Icon(ft.Icons.NOTIFICATIONS_ACTIVE_ROUNDED, color=AcademixColors.YELLOW_NEON, size=20),
+                                        ft.Text("Agenda y Recordatorios", size=16, weight=ft.FontWeight.BOLD, color=ft.Colors.WHITE),
+                                    ],
+                                    spacing=8,
+                                    vertical_alignment=ft.CrossAxisAlignment.CENTER,
+                                ),
+                                ft.FilledButton(
+                                    "Agendar",
+                                    icon=ft.Icons.ADD_ALERT_ROUNDED,
+                                    on_click=lambda _: open_add_event_modal(),
+                                    style=ft.ButtonStyle(
+                                        bgcolor=ft.Colors.with_opacity(0.2, AcademixColors.YELLOW_NEON),
+                                        color=AcademixColors.YELLOW_NEON,
+                                        shape=ft.RoundedRectangleBorder(radius=10),
+                                        padding=ft.Padding(12, 8, 12, 8),
+                                    ),
+                                ),
+                            ],
+                            alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
+                            vertical_alignment=ft.CrossAxisAlignment.CENTER,
                         ),
-                    ),
-                ],
-                alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
+                        ft.Text(
+                            "Planifica entregas, exámenes y activa alertas en tu celular",
+                            size=11,
+                            color=ft.Colors.with_opacity(0.65, ft.Colors.WHITE),
+                        ),
+                    ],
+                    spacing=4,
+                ),
+                padding=ft.Padding(0, 4, 0, 6),
             ),
             ft.Column(event_cards, spacing=10),
         ])
