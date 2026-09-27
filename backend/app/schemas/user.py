@@ -65,3 +65,12 @@ class UserResponse(BaseModel):
 
     class Config:
         from_attributes = True
+
+class UserCredentialsUpdate(BaseModel):
+    username: Optional[str] = None
+    email: Optional[str] = None
+    password: Optional[str] = None
+
+class AccountRecoveryRequest(BaseModel):
+    identifier: str
+    new_password: str

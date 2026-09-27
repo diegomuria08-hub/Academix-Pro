@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.orm import Session
 from app.db.database import get_db
-from app.schemas.user import UserCreate, UserResponse, Token
+from app.schemas.user import UserCreate, UserResponse, Token, AccountRecoveryRequest
 from app.services import user_service
 from app.db.models.users import User
 from app.core import security
@@ -50,3 +50,38 @@ def read_current_user(current_user: User = Depends(get_current_user)):
     Obtiene la información del usuario actualmente autenticado.
     """
     return current_user
+
+@router.post("/recover")
+def recover_account(recovery_in: AccountRecoveryRequest, db: Session = Depends(get_db)):
+    """
+    Permite recuperar acceso o actualizar contraseña en caso de olvido.
+    Busca por nombre de usuario o por correo electrónico.
+    """
+    ident = recovery_in.identifier.strip()
+    user = (
+        db.query(User)
+        .filter((User.email == ident) | (User.username == ident))
+        .first()
+    )
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="No se encontró ninguna cuenta con ese usuario o correo.",
+        )
+
+    if not recovery_in.new_password or len(recovery_in.new_password.strip()) < 4:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="La nueva contraseña debe tener al menos 4 caracteres.",
+        )
+
+    user.hashed_password = security.get_password_hash(recovery_in.new_password.strip())
+    db.commit()
+    db.refresh(user)
+
+    return {
+        "message": "Contraseña restablecida exitosamente",
+        "username": user.username or user.email,
+        "email": user.email,
+    }
+

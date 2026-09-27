@@ -39,13 +39,13 @@ def RegisterScreen(page: ft.Page):
         ],
         value="high_school",
         filled=True,
-        bgcolor=ft.Colors.with_opacity(0.1, "#0D1B2A"),
+        bgcolor="#0F1E36",
         color=ft.Colors.WHITE,
-        border_radius=14,
-        border_color=ft.Colors.with_opacity(0.2, ft.Colors.WHITE),
-        focused_border_color=AcademixColors.CYAN_NEON,
-        label_style=ft.TextStyle(color=ft.Colors.with_opacity(0.7, ft.Colors.WHITE), size=13),
-        height=52,
+        border=ft.OutlineInputBorder(
+            border_radius=14,
+            side=ft.BorderSide(color=AcademixColors.CYAN_NEON, width=1.5),
+        ),
+        label_style=ft.TextStyle(color=AcademixColors.CYAN_NEON, size=13, weight=ft.FontWeight.BOLD),
     )
 
     error_text = ft.Text("", color=AcademixColors.ERROR, visible=False, size=12, text_align=ft.TextAlign.CENTER)

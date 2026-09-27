@@ -35,9 +35,15 @@ class ApiClient:
     def get_me(self):
         return self.client.get("/auth/me")
 
-    # Métodos de Perfil (Fase 6)
     def update_profile(self, data: dict):
         return self.client.put("/users/me/profile", json=data)
+
+    def update_credentials(self, data: dict):
+        return self.client.put("/users/me/credentials", json=data)
+
+    def recover_account(self, identifier: str, new_password: str):
+        return self.client.post("/auth/recover", json={"identifier": identifier, "new_password": new_password})
+
 
     def get_settings(self):
         return self.client.get("/users/me/settings")

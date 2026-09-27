@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from app.db.database import get_db
 from app.db.models.users import User
-from app.schemas.user import UserResponse, UserProfileUpdate, AcademicSettingsResponse, AcademicSettingsUpdate
+from app.schemas.user import UserResponse, UserProfileUpdate, AcademicSettingsResponse, AcademicSettingsUpdate, UserCredentialsUpdate
 from app.services import user_service
 from app.api.dependencies.auth import get_current_user
 
@@ -41,3 +41,37 @@ def update_my_settings(
     """
     user = user_service.update_academic_settings(db, current_user, settings_in)
     return user.settings
+
+@router.put("/me/credentials", response_model=UserResponse)
+def update_my_credentials(
+    cred_in: UserCredentialsUpdate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """
+    Actualiza las credenciales de acceso del usuario autenticado (nombre de usuario, correo, contraseña)
+    sin modificar ni perjudicar sus periodos, materias, horarios ni evaluaciones.
+    """
+    from app.core import security
+
+    if cred_in.username:
+        new_uname = cred_in.username.strip()
+        existing = db.query(User).filter(User.username == new_uname, User.id != current_user.id).first()
+        if existing:
+            raise HTTPException(status_code=400, detail="Ese nombre de usuario ya está registrado.")
+        current_user.username = new_uname
+
+    if cred_in.email:
+        new_email = cred_in.email.strip()
+        existing = db.query(User).filter(User.email == new_email, User.id != current_user.id).first()
+        if existing:
+            raise HTTPException(status_code=400, detail="Ese correo electrónico ya está registrado.")
+        current_user.email = new_email
+
+    if cred_in.password and cred_in.password.strip():
+        current_user.hashed_password = security.get_password_hash(cred_in.password.strip())
+
+    db.commit()
+    db.refresh(current_user)
+    return current_user
+

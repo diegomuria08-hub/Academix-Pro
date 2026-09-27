@@ -30,21 +30,13 @@ def main(page: ft.Page):
                 state.set_user(saved_user)
             else:
                 state.current_user = {"is_authenticated": True}
-            # Validar con el backend en segundo plano sin congelar la app en el arranque
+            # Sincronizar datos frescos del perfil en segundo plano sin cerrar la sesión
             import threading
             def _validate_session():
                 try:
                     me_resp = api.get_me()
                     if me_resp.status_code == 200:
                         state.set_user(me_resp.json())
-                    elif me_resp.status_code == 401:
-                        import time
-                        time.sleep(2)
-                        retry_resp = api.get_me()
-                        if retry_resp.status_code == 401:
-                            state.logout()
-                            if page.route not in ["/login", "/register"]:
-                                page.navigate("/login")
                 except Exception:
                     pass
             threading.Thread(target=_validate_session, daemon=True).start()

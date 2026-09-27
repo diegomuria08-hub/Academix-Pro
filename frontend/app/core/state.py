@@ -2,7 +2,8 @@ import os
 import json
 from app.core.api_client import api
 
-SESSION_FILE = os.path.join(os.path.expanduser("~"), ".academix_session.json")
+SESSION_FILE_HOME = os.path.join(os.path.expanduser("~"), ".academix_session.json")
+SESSION_FILE_LOCAL = os.path.join(os.path.dirname(os.path.abspath(__file__)), "session.json")
 
 class AppState:
     _instance = None
@@ -38,24 +39,34 @@ class AppState:
             except Exception:
                 pass
 
-        # 2. Guardar en archivo local persistente (inmune a reinicios)
-        try:
-            payload = {"token": token, "user": user_data or self.current_user}
-            with open(SESSION_FILE, "w", encoding="utf-8") as f:
-                json.dump(payload, f)
-        except Exception:
-            pass
+        # 2. Guardar en archivos locales persistentes (redundancia total)
+        payload = {"token": token, "user": user_data or self.current_user}
+        for path in [SESSION_FILE_HOME, SESSION_FILE_LOCAL]:
+            try:
+                with open(path, "w", encoding="utf-8") as f:
+                    json.dump(payload, f)
+            except Exception:
+                pass
 
     def _update_session_file(self, user_data: dict):
         try:
             token = api.token
-            if not token and os.path.exists(SESSION_FILE):
-                with open(SESSION_FILE, "r", encoding="utf-8") as f:
-                    data = json.load(f)
-                    token = data.get("token")
+            if not token:
+                for path in [SESSION_FILE_HOME, SESSION_FILE_LOCAL]:
+                    if os.path.exists(path):
+                        with open(path, "r", encoding="utf-8") as f:
+                            data = json.load(f)
+                            token = data.get("token")
+                            if token:
+                                break
             if token:
-                with open(SESSION_FILE, "w", encoding="utf-8") as f:
-                    json.dump({"token": token, "user": user_data}, f)
+                payload = {"token": token, "user": user_data}
+                for path in [SESSION_FILE_HOME, SESSION_FILE_LOCAL]:
+                    try:
+                        with open(path, "w", encoding="utf-8") as f:
+                            json.dump(payload, f)
+                    except Exception:
+                        pass
             if self.page and hasattr(self.page, "client_storage") and token:
                 self.page.client_storage.set("user", user_data)
                 self.page.client_storage.set("academix_session", {"token": token, "user": user_data})
@@ -83,16 +94,19 @@ class AppState:
             except Exception:
                 pass
 
-        # 2. Fallback: archivo local persistente
+        # 2. Fallback: archivos locales redundantes
         if not token:
-            try:
-                if os.path.exists(SESSION_FILE):
-                    with open(SESSION_FILE, "r", encoding="utf-8") as f:
-                        data = json.load(f)
-                        token = data.get("token")
-                        user_data = data.get("user")
-            except Exception:
-                pass
+            for path in [SESSION_FILE_HOME, SESSION_FILE_LOCAL]:
+                try:
+                    if os.path.exists(path):
+                        with open(path, "r", encoding="utf-8") as f:
+                            data = json.load(f)
+                            token = data.get("token")
+                            user_data = data.get("user")
+                            if token:
+                                break
+                except Exception:
+                    pass
 
         return token, user_data
 
@@ -114,10 +128,11 @@ class AppState:
             except Exception:
                 pass
 
-        try:
-            if os.path.exists(SESSION_FILE):
-                os.remove(SESSION_FILE)
-        except Exception:
-            pass
+        for path in [SESSION_FILE_HOME, SESSION_FILE_LOCAL]:
+            try:
+                if os.path.exists(path):
+                    os.remove(path)
+            except Exception:
+                pass
         
 state = AppState()

@@ -156,6 +156,113 @@ def LoginScreen(page: ft.Page):
         border=ft.Border.all(1, ft.Colors.with_opacity(0.2, ft.Colors.WHITE)),
     )
 
+    def show_snack(msg: str, error: bool = False):
+        snack = ft.SnackBar(
+            content=ft.Text(msg, color=ft.Colors.WHITE, size=13),
+            bgcolor=AcademixColors.ERROR if error else AcademixColors.SUCCESS,
+            duration=3500,
+        )
+        if hasattr(page, "open"):
+            page.open(snack)
+        else:
+            page.snack_bar = snack
+            snack.open = True
+            page.update()
+
+    def open_recovery_dialog(e):
+        rec_error = ft.Text("", color=AcademixColors.ERROR, size=12, visible=False)
+        rec_ident = ft.TextField(
+            label="Correo o Nombre de Usuario",
+            hint_text="Ej: Stefania_Martinez o correo",
+            filled=True,
+            bgcolor="#0F1E36",
+            color=ft.Colors.WHITE,
+            border=ft.OutlineInputBorder(border_radius=12, side=ft.BorderSide(color=AcademixColors.CYAN_NEON, width=1.2)),
+        )
+        rec_new_pass = ft.TextField(
+            label="Nueva Contraseña",
+            password=True,
+            can_reveal_password=True,
+            hint_text="Mínimo 4 caracteres",
+            filled=True,
+            bgcolor="#0F1E36",
+            color=ft.Colors.WHITE,
+            border=ft.OutlineInputBorder(border_radius=12, side=ft.BorderSide(color=AcademixColors.CYAN_NEON, width=1.2)),
+        )
+
+        def submit_recovery(ev):
+            rec_error.visible = False
+            ident = rec_ident.value.strip() if rec_ident.value else ""
+            new_p = rec_new_pass.value.strip() if rec_new_pass.value else ""
+            if not ident or not new_p:
+                rec_error.value = "Por favor completa ambos campos"
+                rec_error.visible = True
+                page.update()
+                return
+
+            try:
+                resp = api.recover_account(ident, new_p)
+                if resp.status_code == 200:
+                    page.pop_dialog()
+                    data = resp.json()
+                    user_found = data.get("username") or data.get("email") or ident
+                    email_field.value = user_found
+                    password_field.value = new_p
+                    show_snack("✅ ¡Contraseña restablecida con éxito! Ya puedes iniciar sesión.")
+                    page.update()
+                else:
+                    detail = resp.json().get("detail", "Error al recuperar cuenta")
+                    rec_error.value = str(detail)
+                    rec_error.visible = True
+                    page.update()
+            except Exception as ex:
+                rec_error.value = f"Error de conexión: {ex}"
+                rec_error.visible = True
+                page.update()
+
+        dlg = ft.AlertDialog(
+            modal=True,
+            title=ft.Row(
+                [
+                    ft.Icon(ft.Icons.LOCK_RESET_ROUNDED, color=AcademixColors.CYAN_NEON, size=22),
+                    ft.Text("Recuperar Cuenta", weight=ft.FontWeight.BOLD, color=ft.Colors.WHITE, size=18),
+                ],
+                spacing=8,
+            ),
+            content=ft.Container(
+                content=ft.Column(
+                    [
+                        rec_error,
+                        ft.Text(
+                            "Ingresa tu nombre de usuario o correo junto con tu nueva clave para recuperar tu acceso.",
+                            size=12,
+                            color=ft.Colors.with_opacity(0.7, ft.Colors.WHITE),
+                        ),
+                        rec_ident,
+                        rec_new_pass,
+                    ],
+                    spacing=12,
+                    scroll=ft.ScrollMode.ADAPTIVE,
+                ),
+                width=330,
+                height=260,
+                padding=6,
+            ),
+            actions=[
+                ft.TextButton("Cancelar", on_click=lambda _: page.pop_dialog()),
+                ft.FilledButton(
+                    "Restablecer",
+                    on_click=submit_recovery,
+                    style=ft.ButtonStyle(
+                        bgcolor=AcademixColors.CYAN_NEON,
+                        color=ft.Colors.BLACK,
+                        shape=ft.RoundedRectangleBorder(radius=10),
+                    ),
+                ),
+            ],
+        )
+        page.show_dialog(dlg)
+
     # ─── Tarjeta Central Flotante de Vidrio (Glassmorphism) ─────
     glass_card = ft.Container(
         content=ft.Column(
@@ -175,9 +282,19 @@ def LoginScreen(page: ft.Page):
                     padding=ft.Padding(0, 2, 0, 4),
                 ),
                 password_field,
-                ft.Container(height=2),
-                # Fila 'Mantener sesión iniciada' con Switch neón
-                ft.Container(height=6),
+                ft.Container(
+                    content=ft.TextButton(
+                        "¿Olvidaste tu contraseña o usuario?",
+                        on_click=open_recovery_dialog,
+                        style=ft.ButtonStyle(
+                            color=AcademixColors.CYAN_NEON,
+                            padding=ft.Padding(0, 0, 0, 0),
+                        ),
+                    ),
+                    alignment=ft.Alignment.CENTER_RIGHT,
+                    padding=ft.Padding(0, 2, 0, 2),
+                ),
+                ft.Container(height=4),
                 login_btn,
                 error_text,
                 ft.Container(height=2),

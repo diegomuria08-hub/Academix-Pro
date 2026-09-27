@@ -4,12 +4,14 @@ from app.core.state import state
 from app.theme.colors import AcademixColors
 
 
-def _glass_field(label: str, value: str = "", hint_text: str = "", keyboard_type=None):
+def _glass_field(label: str, value: str = "", hint_text: str = "", keyboard_type=None, password: bool = False, can_reveal_password: bool = False):
     return ft.TextField(
         label=label,
         value=value,
         hint_text=hint_text,
         keyboard_type=keyboard_type,
+        password=password,
+        can_reveal_password=can_reveal_password,
         filled=True,
         bgcolor=ft.Colors.with_opacity(0.15, "#0D1B2A"),
         color=ft.Colors.WHITE,
@@ -44,17 +46,17 @@ def ProfileScreen(page: ft.Page, focus_settings: bool = False):
         label="Tipo de Estudiante",
         value=profile.get("student_type", "university"),
         options=[
-            ft.dropdown.Option("high_school", "Liceo / Bachillerato"),
-            ft.dropdown.Option("university", "Universidad"),
+            ft.dropdown.Option("high_school", "🏫  Liceo / Bachillerato"),
+            ft.dropdown.Option("university", "🎓  Universidad"),
         ],
         filled=True,
-        bgcolor=ft.Colors.with_opacity(0.15, "#0D1B2A"),
+        bgcolor="#0F1E36",
         color=ft.Colors.WHITE,
         border=ft.OutlineInputBorder(
-            border_radius=12,
-            side=ft.BorderSide(color=ft.Colors.with_opacity(0.2, ft.Colors.WHITE)),
+            border_radius=14,
+            side=ft.BorderSide(color=AcademixColors.CYAN_NEON, width=1.5),
         ),
-        focused_border_color=AcademixColors.CYAN_NEON,
+        label_style=ft.TextStyle(color=AcademixColors.CYAN_NEON, size=13, weight=ft.FontWeight.BOLD),
     )
 
     # ─── Avatar Preview ─────────────────────────────────────────
@@ -243,6 +245,83 @@ def ProfileScreen(page: ft.Page, focus_settings: bool = False):
         shadow=ft.BoxShadow(blur_radius=20, color=ft.Colors.with_opacity(0.35, ft.Colors.BLACK), offset=ft.Offset(0, 8)),
     )
 
+    # ─── Tarjeta de Credenciales y Seguridad de Acceso ──────────
+    curr_user = state.current_user or {}
+    username_val = curr_user.get("username") or curr_user.get("email", "")
+    username_field = _glass_field("Nombre de Usuario", value=username_val, hint_text="Ej: Stefania_Martinez")
+    email_cred_field = _glass_field("Correo Electrónico", value=curr_user.get("email", ""), hint_text="ejemplo@academix.com")
+    password_cred_field = _glass_field("Nueva Contraseña", password=True, hint_text="Déjalo vacío para no cambiar tu contraseña actual")
+
+    def save_credentials(e):
+        data = {}
+        if username_field.value and username_field.value.strip():
+            data["username"] = username_field.value.strip()
+        if email_cred_field.value and email_cred_field.value.strip():
+            data["email"] = email_cred_field.value.strip()
+        if password_cred_field.value and password_cred_field.value.strip():
+            data["password"] = password_cred_field.value.strip()
+
+        if not data:
+            show_snack("No se especificaron cambios en las credenciales", error=True)
+            return
+
+        try:
+            resp = api.update_credentials(data)
+            if resp.status_code == 200:
+                updated_user = resp.json()
+                state.set_user(updated_user)
+                if api.token:
+                    state.save_session(api.token, updated_user)
+                password_cred_field.value = ""
+                show_snack("✅ Credenciales actualizadas exitosamente en la base de datos")
+                page.update()
+            else:
+                detail = resp.json().get("detail", "Error al actualizar credenciales")
+                show_snack(str(detail), error=True)
+        except Exception as ex:
+            show_snack(f"Error de conexión: {ex}", error=True)
+
+    credentials_card = ft.Container(
+        content=ft.Column(
+            [
+                ft.Row(
+                    [
+                        ft.Icon(icon=ft.Icons.SECURITY_ROUNDED, color=AcademixColors.YELLOW_NEON, size=22),
+                        ft.Text("Credenciales y Seguridad de Acceso", size=17, weight=ft.FontWeight.BOLD, color=ft.Colors.WHITE),
+                    ],
+                    spacing=10,
+                ),
+                ft.Divider(color=ft.Colors.with_opacity(0.12, ft.Colors.WHITE), height=14),
+                ft.Text(
+                    "Edita tu nombre de usuario, correo o contraseña en cualquier momento sin afectar tus materias, notas ni horarios.",
+                    size=12,
+                    color=ft.Colors.with_opacity(0.7, ft.Colors.WHITE),
+                ),
+                username_field,
+                email_cred_field,
+                password_cred_field,
+                ft.Container(height=4),
+                ft.FilledButton(
+                    "Actualizar Credenciales",
+                    icon=ft.Icons.LOCK_RESET,
+                    on_click=save_credentials,
+                    style=ft.ButtonStyle(
+                        bgcolor=ft.Colors.with_opacity(0.25, AcademixColors.YELLOW_NEON),
+                        color=AcademixColors.YELLOW_NEON,
+                        shape=ft.RoundedRectangleBorder(radius=10),
+                        padding=ft.Padding(16, 12, 16, 12),
+                    ),
+                ),
+            ],
+            spacing=12,
+        ),
+        padding=18,
+        border_radius=18,
+        bgcolor=ft.Colors.with_opacity(0.22, "#0D1B2A"),
+        border=ft.Border.all(1, ft.Colors.with_opacity(0.14, ft.Colors.WHITE)),
+        shadow=ft.BoxShadow(blur_radius=20, color=ft.Colors.with_opacity(0.35, ft.Colors.BLACK), offset=ft.Offset(0, 8)),
+    )
+
     page_title = "Configuración del Sistema ⚙️" if focus_settings else "Mi Perfil 👤"
     page_subtitle = "Ajusta tus parámetros académicos y escala de notas." if focus_settings else "Gestiona tu identidad y credenciales en Académix."
 
@@ -271,9 +350,11 @@ def ProfileScreen(page: ft.Page, focus_settings: bool = False):
             ft.Text(page_title, size=24, weight=ft.FontWeight.BOLD, color=ft.Colors.WHITE),
             ft.Text(page_subtitle, size=13, color=ft.Colors.with_opacity(0.6, ft.Colors.WHITE)),
             ft.Container(height=16),
-            settings_card if focus_settings else personal_card,
+            personal_card,
             ft.Container(height=10),
-            personal_card if focus_settings else settings_card,
+            credentials_card,
+            ft.Container(height=10),
+            settings_card,
             ft.Container(height=8),
             logout_btn,
         ],
