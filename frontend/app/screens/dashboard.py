@@ -571,7 +571,9 @@ def _section_calculator(page: ft.Page):
         value=selected_subject_id,
         options=subject_options,
         filled=True,
-        bgcolor=ft.Colors.with_opacity(0.15, "#0D1B2A"),
+        bgcolor="#0F1E36",
+        focused_bgcolor="#142644",
+        fill_color="#0F1E36",
         color=ft.Colors.WHITE,
         label_style=ft.TextStyle(color=AcademixColors.CYAN_NEON, size=13, weight=ft.FontWeight.BOLD),
         border=ft.OutlineInputBorder(

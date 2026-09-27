@@ -210,13 +210,13 @@ def ProfileScreen(page: ft.Page, focus_settings: bool = False):
                 ft.Row(
                     [
                         ft.Container(max_grade_field, expand=1),
-                        ft.Container(passing_grade_field, expand=1),
                         ft.Container(min_grade_field, expand=1),
                     ],
                     spacing=12,
                 ),
                 ft.Row(
                     [
+                        ft.Container(passing_grade_field, expand=1),
                         ft.Container(default_evals_field, expand=1),
                     ],
                     spacing=12,

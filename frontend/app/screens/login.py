@@ -8,7 +8,7 @@ def LoginScreen(page: ft.Page):
     # ─── Campos de entrada Glassmorphism ────────────────────────
     email_field = ft.TextField(
         label="Usuario o Correo Electrónico",
-        hint_text="Admin_Diego o correo...",
+        hint_text="ejemplo@universidad.edu o usuario",
         prefix_icon=ft.Icons.PERSON_OUTLINE,
         filled=True,
         bgcolor=ft.Colors.with_opacity(0.12, "#0D1B2A"),
@@ -42,12 +42,6 @@ def LoginScreen(page: ft.Page):
         focused_border_color=AcademixColors.CYAN_NEON,
         focused_border_width=2,
         height=54,
-    )
-
-    remember_me_switch = ft.Switch(
-        value=True,
-        active_color=AcademixColors.CYAN_NEON,
-        active_track_color=ft.Colors.with_opacity(0.35, AcademixColors.PRIMARY_PURPLE),
     )
 
     error_text = ft.Text("", color=AcademixColors.ERROR, visible=False, size=12, text_align=ft.TextAlign.CENTER)
@@ -183,18 +177,7 @@ def LoginScreen(page: ft.Page):
                 password_field,
                 ft.Container(height=2),
                 # Fila 'Mantener sesión iniciada' con Switch neón
-                ft.Row(
-                    [
-                        ft.Text(
-                            "Mantener sesión iniciada",
-                            size=12,
-                            color=ft.Colors.with_opacity(0.75, ft.Colors.WHITE),
-                        ),
-                        remember_me_switch,
-                    ],
-                    alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
-                ),
-                ft.Container(height=4),
+                ft.Container(height=6),
                 login_btn,
                 error_text,
                 ft.Container(height=2),

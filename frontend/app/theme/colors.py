@@ -37,6 +37,11 @@ class AcademixColors:
 def get_theme(is_dark=True):
     return ft.Theme(
         color_scheme_seed=AcademixColors.CYAN_NEON,
+        color_scheme=ft.ColorScheme(
+            surface="#0F1E36",
+            surface_variant="#142644",
+            background="#060D1A",
+        ),
         visual_density=ft.VisualDensity.COMFORTABLE,
         font_family="Roboto",
     )

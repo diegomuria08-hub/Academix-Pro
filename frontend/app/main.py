@@ -28,6 +28,8 @@ def main(page: ft.Page):
             api.set_token(saved_token)
             if saved_user:
                 state.set_user(saved_user)
+            else:
+                state.current_user = {"is_authenticated": True}
             # Validar con el backend en segundo plano sin congelar la app en el arranque
             import threading
             def _validate_session():

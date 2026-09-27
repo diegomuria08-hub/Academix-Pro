@@ -624,52 +624,91 @@ def SubjectsScreen(page: ft.Page, view_mode: str = "notas"):
                         tooltip="Puntos máximos en juego",
                     )
 
-                title_col = [
-                    ft.Row(
+                eval_row = ft.Container(
+                    content=ft.Column(
                         [
-                            ft.Icon(ft.Icons.FACT_CHECK_OUTLINED, size=16, color=sub_color),
-                            ft.Text(ev["name"], size=13, weight=ft.FontWeight.W_500, color=ft.Colors.WHITE),
+                            # Fila 1: Icono + Título de la evaluación + Botones de Acción (Editar y Eliminar)
+                            ft.Row(
+                                [
+                                    ft.Row(
+                                        [
+                                            ft.Icon(ft.Icons.FACT_CHECK_OUTLINED, size=16, color=sub_color),
+                                            ft.Text(ev["name"], size=14, weight=ft.FontWeight.W_600, color=ft.Colors.WHITE, expand=True),
+                                        ],
+                                        spacing=8,
+                                        vertical_alignment=ft.CrossAxisAlignment.CENTER,
+                                        expand=True,
+                                    ),
+                                    ft.Row(
+                                        [
+                                            ft.IconButton(
+                                                icon=ft.Icons.EDIT_OUTLINED,
+                                                icon_size=18,
+                                                icon_color=AcademixColors.CYAN_NEON,
+                                                tooltip="Modificar nota o evaluación",
+                                                padding=4,
+                                                on_click=lambda _, s_id=sub_id, e_obj=ev: open_eval_modal(s_id, e_obj),
+                                            ),
+                                            ft.IconButton(
+                                                icon=ft.Icons.DELETE_OUTLINE,
+                                                icon_size=18,
+                                                icon_color=AcademixColors.ERROR,
+                                                tooltip="Eliminar evaluación",
+                                                padding=4,
+                                                on_click=lambda _, s_id=sub_id, e_id=ev_id, e_name=ev["name"]: confirm_delete_eval(s_id, e_id, e_name),
+                                            ),
+                                        ],
+                                        spacing=0,
+                                        vertical_alignment=ft.CrossAxisAlignment.CENTER,
+                                    ),
+                                ],
+                                alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
+                                vertical_alignment=ft.CrossAxisAlignment.CENTER,
+                            ),
+                            # Fila 2: Chips adaptativos de Ponderación, Nota y Puntos Aportados
+                            ft.Row(
+                                [
+                                    ft.Container(
+                                        content=ft.Text(f"Peso: {weight:.0f}%", size=11, weight=ft.FontWeight.BOLD, color=ft.Colors.with_opacity(0.9, ft.Colors.WHITE)),
+                                        bgcolor=ft.Colors.with_opacity(0.12, ft.Colors.WHITE),
+                                        padding=ft.Padding(8, 4, 8, 4),
+                                        border_radius=8,
+                                    ),
+                                    score_pill,
+                                    contrib_pill,
+                                ],
+                                spacing=8,
+                                wrap=True,
+                                vertical_alignment=ft.CrossAxisAlignment.CENTER,
+                            ),
+                            # Fila 3: Descripción de la evaluación con ubicación estilizada
+                            *(
+                                [
+                                    ft.Container(
+                                        content=ft.Row(
+                                            [
+                                                ft.Icon(ft.Icons.DESCRIPTION_OUTLINED, size=13, color=ft.Colors.with_opacity(0.5, ft.Colors.WHITE)),
+                                                ft.Text(topic, size=11, color=ft.Colors.with_opacity(0.75, ft.Colors.WHITE), italic=True, expand=True),
+                                            ],
+                                            spacing=6,
+                                            vertical_alignment=ft.CrossAxisAlignment.START,
+                                        ),
+                                        padding=ft.Padding(10, 6, 10, 6),
+                                        border_radius=8,
+                                        bgcolor=ft.Colors.with_opacity(0.06, ft.Colors.WHITE),
+                                        border=ft.Border.all(1, ft.Colors.with_opacity(0.08, ft.Colors.WHITE)),
+                                    )
+                                ]
+                                if topic
+                                else []
+                            ),
                         ],
                         spacing=8,
-                    )
-                ]
-                if topic:
-                    title_col.append(ft.Text(topic, size=11, color=ft.Colors.with_opacity(0.55, ft.Colors.WHITE), italic=True))
-
-                eval_row = ft.Container(
-                    content=ft.Row(
-                        [
-                            ft.Column(title_col, spacing=2, expand=True),
-                            ft.Container(
-                                content=ft.Text(f"{weight:.0f}%", size=12, weight=ft.FontWeight.BOLD, color=ft.Colors.with_opacity(0.85, ft.Colors.WHITE)),
-                                bgcolor=ft.Colors.with_opacity(0.1, ft.Colors.WHITE),
-                                padding=ft.Padding(8, 4, 8, 4),
-                                border_radius=8,
-                            ),
-                            score_pill,
-                            contrib_pill,
-                            ft.IconButton(
-                                icon=ft.Icons.EDIT_OUTLINED,
-                                icon_size=16,
-                                icon_color=ft.Colors.with_opacity(0.7, ft.Colors.WHITE),
-                                tooltip="Modificar nota o evaluación",
-                                on_click=lambda _, s_id=sub_id, e_obj=ev: open_eval_modal(s_id, e_obj),
-                            ),
-                            ft.IconButton(
-                                icon=ft.Icons.DELETE_OUTLINE,
-                                icon_size=16,
-                                icon_color=ft.Colors.RED_ACCENT,
-                                tooltip="Eliminar evaluación",
-                                on_click=lambda _, s_id=sub_id, e_id=ev_id, e_name=ev["name"]: confirm_delete_eval(s_id, e_id, e_name),
-                            ),
-                        ],
-                        alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
-                        vertical_alignment=ft.CrossAxisAlignment.CENTER,
                     ),
-                    padding=ft.Padding(12, 8, 12, 8),
-                    border_radius=10,
-                    bgcolor=ft.Colors.with_opacity(0.1, "#0D1B2A"),
-                    border=ft.Border.all(1, ft.Colors.with_opacity(0.08, ft.Colors.WHITE)),
+                    padding=ft.Padding(14, 12, 14, 12),
+                    border_radius=12,
+                    bgcolor=ft.Colors.with_opacity(0.16, "#0D1B2A"),
+                    border=ft.Border.all(1, ft.Colors.with_opacity(0.1, ft.Colors.WHITE)),
                 )
                 eval_rows.append(eval_row)
         else:

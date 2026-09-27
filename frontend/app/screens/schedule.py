@@ -213,9 +213,10 @@ def ScheduleScreen(page: ft.Page):
                         professor_field,
                     ],
                     spacing=12,
-                    tight=True,
+                    scroll=ft.ScrollMode.ADAPTIVE,
                 ),
                 width=380,
+                height=320,
                 padding=10,
             ),
             actions=[
@@ -241,15 +242,21 @@ def ScheduleScreen(page: ft.Page):
 
         modal_error = ft.Text("", color=AcademixColors.ERROR, size=12, visible=False)
 
-        subject_options = [ft.dropdown.Option("", "Sin materia específica")] + [
+        subject_options = [
             ft.dropdown.Option(s["id"], s["name"]) for s in subjects_cache
         ]
+        if not subject_options:
+            show_snack("Primero debes registrar al menos una materia en Notas", error=True)
+            return
+
         subject_dd = ft.Dropdown(
-            label="Materia Asociada",
+            label="Materia Asociada *",
             options=subject_options,
-            value=subjects_cache[0]["id"] if subjects_cache else "",
+            value=subject_options[0].key,
             filled=True,
-            bgcolor=ft.Colors.with_opacity(0.15, "#0D1B2A"),
+            bgcolor="#0F1E36",
+            focused_bgcolor="#142644",
+            fill_color="#0F1E36",
             color=ft.Colors.WHITE,
         )
 
@@ -257,7 +264,7 @@ def ScheduleScreen(page: ft.Page):
             label="Título de la Evaluación o Tarea",
             hint_text="Ej: Parcial 2 de Física, Entrega Proyecto",
             filled=True,
-            bgcolor=ft.Colors.with_opacity(0.15, "#0D1B2A"),
+            bgcolor="#0F1E36",
             color=ft.Colors.WHITE,
         )
 
@@ -268,7 +275,7 @@ def ScheduleScreen(page: ft.Page):
             min_lines=2,
             max_lines=3,
             filled=True,
-            bgcolor=ft.Colors.with_opacity(0.15, "#0D1B2A"),
+            bgcolor="#0F1E36",
             color=ft.Colors.WHITE,
         )
 
@@ -277,7 +284,7 @@ def ScheduleScreen(page: ft.Page):
             value=(datetime.today() + timedelta(days=3)).strftime("%Y-%m-%d"),
             hint_text="Ej: 2026-10-15",
             filled=True,
-            bgcolor=ft.Colors.with_opacity(0.15, "#0D1B2A"),
+            bgcolor="#0F1E36",
             color=ft.Colors.WHITE,
         )
 
@@ -286,7 +293,7 @@ def ScheduleScreen(page: ft.Page):
             value="09:00",
             hint_text="Ej: 09:00 o 15:30",
             filled=True,
-            bgcolor=ft.Colors.with_opacity(0.15, "#0D1B2A"),
+            bgcolor="#0F1E36",
             color=ft.Colors.WHITE,
         )
 
@@ -301,7 +308,9 @@ def ScheduleScreen(page: ft.Page):
             options=reminder_options,
             value="24",
             filled=True,
-            bgcolor=ft.Colors.with_opacity(0.15, "#0D1B2A"),
+            bgcolor="#0F1E36",
+            focused_bgcolor="#142644",
+            fill_color="#0F1E36",
             color=ft.Colors.WHITE,
         )
 
@@ -327,7 +336,7 @@ def ScheduleScreen(page: ft.Page):
                 return
 
             payload = {
-                "subject_id": subject_dd.value if subject_dd.value else None,
+                "subject_id": subject_dd.value,
                 "title": title,
                 "description": topic_field.value.strip() if topic_field.value else None,
                 "event_date": full_dt_str,
@@ -364,15 +373,16 @@ def ScheduleScreen(page: ft.Page):
                         reminder_dd,
                     ],
                     spacing=12,
-                    tight=True,
+                    scroll=ft.ScrollMode.ADAPTIVE,
                 ),
                 width=380,
+                height=350,
                 padding=10,
             ),
             actions=[
                 ft.TextButton("Cancelar", on_click=lambda _: page.pop_dialog()),
                 ft.FilledButton(
-                    "Agendar",
+                    "Agendar Evaluación",
                     on_click=save_event,
                     style=ft.ButtonStyle(
                         bgcolor=AcademixColors.CYAN_NEON,
@@ -412,7 +422,7 @@ def ScheduleScreen(page: ft.Page):
             try:
                 api.delete_event(event_id)
                 page.pop_dialog()
-                show_snack(f"Evento '{title}' eliminado")
+                show_snack(f"Recordatorio '{title}' retirado de la agenda")
                 load_data()
             except Exception as ex:
                 page.pop_dialog()
@@ -420,35 +430,59 @@ def ScheduleScreen(page: ft.Page):
 
         dlg = ft.AlertDialog(
             modal=True,
-            title=ft.Text("¿Eliminar de la Agenda?"),
-            content=ft.Text(f"¿Deseas quitar '{title}' de tus recordatorios?"),
+            title=ft.Text("¿Quitar de la Agenda?"),
+            content=ft.Text(f"Se retirará el recordatorio de '{title}' del calendario. Tu evaluación y sus calificaciones se mantendrán a salvo en Notas."),
             actions=[
                 ft.TextButton("Cancelar", on_click=lambda _: page.pop_dialog()),
-                ft.FilledButton("Eliminar", style=ft.ButtonStyle(bgcolor=AcademixColors.ERROR, color=ft.Colors.WHITE), on_click=delete),
+                ft.FilledButton("Quitar", style=ft.ButtonStyle(bgcolor=AcademixColors.ERROR, color=ft.Colors.WHITE), on_click=delete),
             ],
         )
         page.show_dialog(dlg)
+
+    def request_device_notifications(e=None):
+        try:
+            js_code = """
+            if (typeof Notification !== 'undefined') {
+                Notification.requestPermission().then(function(perm) {
+                    if (perm === 'granted') {
+                        new Notification('🔔 Académix Pro', {
+                            body: '¡Alertas activadas! Te avisaremos con anticipación de tus clases y exámenes.',
+                            icon: '/icon.png'
+                        });
+                    }
+                });
+            }
+            """
+            page.evaluate_javascript(js_code)
+            show_snack("🔔 Solicitud enviada. Acepta el permiso en tu celular para recibir alertas.")
+        except Exception as ex:
+            show_snack(f"Alertas de dispositivo activadas: {ex}")
 
     # ─── Renderizado de la Interfaz ───────────────────────────────
     def render_view():
         content_container.controls.clear()
 
-        # 1. Pestañas de Selector de Día (Para Modo Día y Modo Semana)
+        # 1. Pestañas de Selector de Día (Día abreviado único + Indicador neón)
         day_tabs = []
         for d_num, d_name, d_short in DAYS_OF_WEEK:
             is_active = (selected_day[0] == d_num)
             btn = ft.Container(
                 content=ft.Column(
                     [
-                        ft.Text(d_short, size=11, weight=ft.FontWeight.BOLD, color=AcademixColors.CYAN_NEON if is_active else ft.Colors.with_opacity(0.6, ft.Colors.WHITE)),
-                        ft.Text(d_name[:3], size=13, weight=ft.FontWeight.W_600, color=ft.Colors.WHITE if is_active else ft.Colors.with_opacity(0.7, ft.Colors.WHITE)),
+                        ft.Text(d_short, size=12, weight=ft.FontWeight.BOLD, color=AcademixColors.CYAN_NEON if is_active else ft.Colors.with_opacity(0.65, ft.Colors.WHITE)),
+                        ft.Container(
+                            width=14,
+                            height=3,
+                            border_radius=2,
+                            bgcolor=AcademixColors.CYAN_NEON if is_active else ft.Colors.TRANSPARENT,
+                        ),
                     ],
                     horizontal_alignment=ft.CrossAxisAlignment.CENTER,
-                    spacing=2,
+                    spacing=4,
                 ),
-                padding=ft.Padding(12, 8, 12, 8),
+                padding=ft.Padding(14, 10, 14, 8),
                 border_radius=12,
-                bgcolor=ft.Colors.with_opacity(0.25, AcademixColors.CYAN_NEON) if is_active else ft.Colors.with_opacity(0.08, "#0D1B2A"),
+                bgcolor=ft.Colors.with_opacity(0.22, AcademixColors.CYAN_NEON) if is_active else ft.Colors.with_opacity(0.08, "#0D1B2A"),
                 border=ft.Border.all(1.2, AcademixColors.CYAN_NEON if is_active else ft.Colors.with_opacity(0.12, ft.Colors.WHITE)),
                 on_click=lambda _, num=d_num: [selected_day.__setitem__(0, num), render_view(), page.update()],
             )
@@ -511,7 +545,7 @@ def ScheduleScreen(page: ft.Page):
                         [
                             ft.Icon(ft.Icons.EVENT_AVAILABLE_OUTLINED, size=40, color=ft.Colors.with_opacity(0.4, AcademixColors.CYAN_NEON)),
                             ft.Text(f"No tienes clases programadas para el {day_name_str}", size=14, color=ft.Colors.with_opacity(0.7, ft.Colors.WHITE)),
-                            ft.TextButton("+ Agregar clase a este día", icon=ft.Icons.ADD, on_click=lambda _: open_add_class_modal()),
+                            ft.TextButton("Agregar clase a este día", icon=ft.Icons.ADD, on_click=lambda _: open_add_class_modal()),
                         ],
                         horizontal_alignment=ft.CrossAxisAlignment.CENTER,
                         spacing=6,
@@ -551,7 +585,8 @@ def ScheduleScreen(page: ft.Page):
                                             ft.Text(date_display, size=12, weight=ft.FontWeight.BOLD, color=AcademixColors.YELLOW_NEON),
                                             ft.Container(
                                                 content=ft.Text(ev.get("subject_name") or "General", size=10, color=ft.Colors.WHITE),
-                                                bgcolor=ft.Colors.with_opacity(0.18, ev_color),
+                                                bgcolor=ft.Colors.with_opacity(0.25, ev_color),
+                                                border=ft.Border.all(1, ev_color),
                                                 padding=ft.Padding(6, 2, 6, 2),
                                                 border_radius=6,
                                             ),
@@ -574,7 +609,7 @@ def ScheduleScreen(page: ft.Page):
                             ft.IconButton(
                                 icon=ft.Icons.DELETE_OUTLINE,
                                 icon_color=AcademixColors.ERROR,
-                                tooltip="Eliminar de agenda",
+                                tooltip="Quitar de agenda",
                                 on_click=lambda _, e_id=ev["id"], t=ev["title"]: delete_event_item(e_id, t),
                             ),
                         ],
@@ -590,21 +625,75 @@ def ScheduleScreen(page: ft.Page):
         else:
             event_cards.append(
                 ft.Container(
-                    content=ft.Row(
+                    content=ft.Column(
                         [
-                            ft.Icon(ft.Icons.EVENT_NOTE_OUTLINED, color=ft.Colors.with_opacity(0.5, ft.Colors.WHITE)),
-                            ft.Text("No tienes evaluaciones agendadas próximas. ¡Agrega tus fechas de examen!", size=13, color=ft.Colors.with_opacity(0.65, ft.Colors.WHITE)),
+                            ft.Row(
+                                [
+                                    ft.Icon(ft.Icons.EVENT_NOTE_OUTLINED, color=AcademixColors.YELLOW_NEON, size=24),
+                                    ft.Text("No tienes evaluaciones agendadas próximas.", size=13, weight=ft.FontWeight.W_500, color=ft.Colors.WHITE),
+                                ],
+                                spacing=10,
+                            ),
+                            ft.Text("Programa las fechas de tus exámenes o entregas para que la app te envíe recordatorios al celular.", size=12, color=ft.Colors.with_opacity(0.7, ft.Colors.WHITE)),
+                            ft.FilledButton(
+                                "Agendar Primera Evaluación",
+                                icon=ft.Icons.ADD_ALERT,
+                                on_click=lambda _: open_add_event_modal(),
+                                style=ft.ButtonStyle(
+                                    bgcolor=AcademixColors.YELLOW_NEON,
+                                    color=ft.Colors.BLACK,
+                                    shape=ft.RoundedRectangleBorder(radius=10),
+                                    padding=ft.Padding(14, 10, 14, 10),
+                                ),
+                            ),
                         ],
                         spacing=10,
                     ),
-                    padding=16,
-                    border_radius=14,
-                    bgcolor=ft.Colors.with_opacity(0.1, "#0D1B2A"),
+                    padding=18,
+                    border_radius=16,
+                    bgcolor=ft.Colors.with_opacity(0.14, "#0D1B2A"),
+                    border=ft.Border.all(1, ft.Colors.with_opacity(0.18, AcademixColors.YELLOW_NEON)),
                 )
             )
 
+        # Banner de Notificaciones al Celular
+        notif_banner = ft.Container(
+            content=ft.Row(
+                [
+                    ft.Icon(ft.Icons.NOTIFICATIONS_ACTIVE_OUTLINED, color=AcademixColors.CYAN_NEON, size=22),
+                    ft.Column(
+                        [
+                            ft.Text("Recordatorios al Celular", size=13, weight=ft.FontWeight.BOLD, color=ft.Colors.WHITE),
+                            ft.Text("Recibe avisos antes de tus clases y exámenes en este dispositivo.", size=11, color=ft.Colors.with_opacity(0.7, ft.Colors.WHITE)),
+                        ],
+                        spacing=2,
+                        expand=True,
+                    ),
+                    ft.FilledButton(
+                        "Activar",
+                        icon=ft.Icons.NOTIFICATIONS,
+                        on_click=request_device_notifications,
+                        style=ft.ButtonStyle(
+                            bgcolor=ft.Colors.with_opacity(0.2, AcademixColors.CYAN_NEON),
+                            color=AcademixColors.CYAN_NEON,
+                            shape=ft.RoundedRectangleBorder(radius=8),
+                            padding=ft.Padding(12, 6, 12, 6),
+                        ),
+                    ),
+                ],
+                alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
+                vertical_alignment=ft.CrossAxisAlignment.CENTER,
+            ),
+            padding=ft.Padding(14, 10, 14, 10),
+            border_radius=12,
+            bgcolor=ft.Colors.with_opacity(0.12, "#0D1B2A"),
+            border=ft.Border.all(1, ft.Colors.with_opacity(0.15, AcademixColors.CYAN_NEON)),
+        )
+
         # Montar el panel principal
         content_container.controls.extend([
+            notif_banner,
+            ft.Container(height=4),
             # Selector de Día Interactivo
             ft.Text("Selecciona el Día:", size=13, weight=ft.FontWeight.W_600, color=ft.Colors.with_opacity(0.75, ft.Colors.WHITE)),
             day_selector_row,
@@ -614,7 +703,7 @@ def ScheduleScreen(page: ft.Page):
                 [
                     ft.Text(f"Clases del {day_name_str} 📚", size=17, weight=ft.FontWeight.BOLD, color=ft.Colors.WHITE),
                     ft.TextButton(
-                        "+ Agregar Clase",
+                        "Agregar Clase",
                         icon=ft.Icons.ADD_ROUNDED,
                         on_click=lambda _: open_add_class_modal(),
                         style=ft.ButtonStyle(color=AcademixColors.CYAN_NEON),
@@ -631,12 +720,13 @@ def ScheduleScreen(page: ft.Page):
                     ft.Row(
                         [
                             ft.Icon(ft.Icons.ALARM, color=AcademixColors.YELLOW_NEON, size=20),
-                            ft.Text("Agenda de Evaluaciones & Recordatorios 🔔", size=17, weight=ft.FontWeight.BOLD, color=ft.Colors.WHITE),
+                            ft.Text("Agenda de Evaluaciones & Recordatorios 🔔", size=16, weight=ft.FontWeight.BOLD, color=ft.Colors.WHITE),
                         ],
                         spacing=8,
+                        expand=True,
                     ),
                     ft.FilledButton(
-                        "+ Agendar Evaluación",
+                        "Agendar",
                         icon=ft.Icons.ADD_ALERT_OUTLINED,
                         on_click=lambda _: open_add_event_modal(),
                         style=ft.ButtonStyle(
@@ -653,36 +743,38 @@ def ScheduleScreen(page: ft.Page):
 
     load_data()
 
-    return ft.Column(
-        [
-            ft.Row(
-                [
-                    ft.Column(
-                        [
-                            ft.Text("Agenda y Horario ⏰", size=19, weight=ft.FontWeight.BOLD, color=ft.Colors.WHITE),
-                            ft.Text("Clases semanales y alertas de evaluaciones", size=12, color=ft.Colors.with_opacity(0.6, ft.Colors.WHITE)),
-                        ],
-                        spacing=2,
-                        expand=True,
-                    ),
-                    ft.FilledButton(
-                        "+ Clase",
-                        icon=ft.Icons.ADD,
-                        on_click=lambda _: open_add_class_modal(),
-                        style=ft.ButtonStyle(
-                            bgcolor=AcademixColors.CYAN_NEON,
-                            color=ft.Colors.BLACK,
-                            shape=ft.RoundedRectangleBorder(radius=10),
-                            padding=ft.Padding(12, 8, 12, 8),
+    return ft.SafeArea(
+        content=ft.Column(
+            [
+                ft.Row(
+                    [
+                        ft.Column(
+                            [
+                                ft.Text("Agenda y Horario ⏰", size=19, weight=ft.FontWeight.BOLD, color=ft.Colors.WHITE),
+                                ft.Text("Clases semanales y alertas de evaluaciones", size=12, color=ft.Colors.with_opacity(0.6, ft.Colors.WHITE)),
+                            ],
+                            spacing=2,
+                            expand=True,
                         ),
-                    ),
-                ],
-                alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
-                vertical_alignment=ft.CrossAxisAlignment.CENTER,
-            ),
-            ft.Container(height=10),
-            loading_bar,
-            content_container,
-        ],
-        spacing=0,
+                        ft.FilledButton(
+                            "Clase",
+                            icon=ft.Icons.ADD,
+                            on_click=lambda _: open_add_class_modal(),
+                            style=ft.ButtonStyle(
+                                bgcolor=AcademixColors.CYAN_NEON,
+                                color=ft.Colors.BLACK,
+                                shape=ft.RoundedRectangleBorder(radius=10),
+                                padding=ft.Padding(12, 8, 12, 8),
+                            ),
+                        ),
+                    ],
+                    alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
+                    vertical_alignment=ft.CrossAxisAlignment.CENTER,
+                ),
+                ft.Container(height=10),
+                loading_bar,
+                content_container,
+            ],
+            spacing=0,
+        )
     )
