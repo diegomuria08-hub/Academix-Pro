@@ -26,7 +26,7 @@ class Settings(BaseSettings):
     
     # Seguridad
     SECRET_KEY: str = os.getenv("SECRET_KEY", "secret_dev_key")
-    ACCESS_TOKEN_EXPIRE_MINUTES: int = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", "1440"))
+    ACCESS_TOKEN_EXPIRE_MINUTES: int = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", "86400"))
     
     # CORS
     CORS_ORIGINS: List[str] = ["*"]

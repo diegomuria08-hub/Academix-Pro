@@ -25,16 +25,20 @@ class AppState:
             self.current_user = user_data
         api.set_token(token)
         
-        # 1. Guardar en client_storage si está disponible
-        if self.page:
+        # 1. Guardar en client_storage (Android SharedPreferences / Web LocalStorage)
+        if self.page and hasattr(self.page, "client_storage"):
             try:
                 self.page.client_storage.set("token", token)
                 if user_data:
                     self.page.client_storage.set("user", user_data)
+                self.page.client_storage.set("academix_session", {
+                    "token": token,
+                    "user": user_data or self.current_user
+                })
             except Exception:
                 pass
 
-        # 2. Guardar en archivo local persistente (inmune a cierres de app en Android)
+        # 2. Guardar en archivo local persistente (inmune a reinicios)
         try:
             payload = {"token": token, "user": user_data or self.current_user}
             with open(SESSION_FILE, "w", encoding="utf-8") as f:
@@ -52,6 +56,9 @@ class AppState:
             if token:
                 with open(SESSION_FILE, "w", encoding="utf-8") as f:
                     json.dump({"token": token, "user": user_data}, f)
+            if self.page and hasattr(self.page, "client_storage") and token:
+                self.page.client_storage.set("user", user_data)
+                self.page.client_storage.set("academix_session", {"token": token, "user": user_data})
         except Exception:
             pass
 
@@ -60,21 +67,30 @@ class AppState:
         token = None
         user_data = None
 
-        # 1. Intentar archivo local persistente
-        try:
-            if os.path.exists(SESSION_FILE):
-                with open(SESSION_FILE, "r", encoding="utf-8") as f:
-                    data = json.load(f)
-                    token = data.get("token")
-                    user_data = data.get("user")
-        except Exception:
-            pass
-
-        # 2. Intentar client_storage si el archivo local no tenía el token
-        if not token and self.page:
+        # 1. Prioridad: client_storage nativo
+        if self.page and hasattr(self.page, "client_storage"):
             try:
                 token = self.page.client_storage.get("token")
                 user_data = self.page.client_storage.get("user")
+                if not token:
+                    sess = self.page.client_storage.get("academix_session")
+                    if sess:
+                        if isinstance(sess, str):
+                            sess = json.loads(sess)
+                        if isinstance(sess, dict):
+                            token = sess.get("token")
+                            user_data = sess.get("user")
+            except Exception:
+                pass
+
+        # 2. Fallback: archivo local persistente
+        if not token:
+            try:
+                if os.path.exists(SESSION_FILE):
+                    with open(SESSION_FILE, "r", encoding="utf-8") as f:
+                        data = json.load(f)
+                        token = data.get("token")
+                        user_data = data.get("user")
             except Exception:
                 pass
 
@@ -85,13 +101,16 @@ class AppState:
         api.clear_token()
         
         if self.page:
+            if hasattr(self.page, "client_storage"):
+                try:
+                    self.page.client_storage.remove("token")
+                    self.page.client_storage.remove("user")
+                    self.page.client_storage.remove("academix_session")
+                except Exception:
+                    pass
             try:
-                self.page.client_storage.remove("token")
-                self.page.client_storage.remove("user")
-            except Exception:
-                pass
-            try:
-                self.page.session.store.remove("token")
+                if hasattr(self.page, "session") and hasattr(self.page.session, "store"):
+                    self.page.session.store.remove("token")
             except Exception:
                 pass
 

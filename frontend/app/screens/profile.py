@@ -91,7 +91,7 @@ def ProfileScreen(page: ft.Page, focus_settings: bool = False):
     min_grade_field = _glass_field("Nota Mínima", value=str(settings_data.get("min_grade", 0.0)), keyboard_type=ft.KeyboardType.NUMBER)
     max_grade_field = _glass_field("Nota Máxima", value=str(settings_data.get("max_grade", 20.0)), keyboard_type=ft.KeyboardType.NUMBER)
     passing_grade_field = _glass_field("Nota para Aprobar", value=str(settings_data.get("passing_grade", 10.0)), keyboard_type=ft.KeyboardType.NUMBER)
-    default_evals_field = _glass_field("Evaluaciones Estándar por Periodo", value=str(settings_data.get("default_eval_count", 5)), keyboard_type=ft.KeyboardType.NUMBER, hint_text="Ej: 5")
+    default_evals_field = _glass_field("Evaluaciones por Periodo", value=str(settings_data.get("default_eval_count", 5)), keyboard_type=ft.KeyboardType.NUMBER, hint_text="Ej: 5")
 
     # ─── Handlers ───────────────────────────────────────────────
     def save_profile(e):
@@ -183,7 +183,7 @@ def ProfileScreen(page: ft.Page, focus_settings: bool = False):
             ],
             spacing=12,
         ),
-        padding=24,
+        padding=18,
         border_radius=18,
         bgcolor=ft.Colors.with_opacity(0.22, "#0D1B2A"),
         border=ft.Border.all(1, ft.Colors.with_opacity(0.14, ft.Colors.WHITE)),
@@ -197,11 +197,11 @@ def ProfileScreen(page: ft.Page, focus_settings: bool = False):
                 ft.Row(
                     [
                         ft.Icon(icon=ft.Icons.TUNE, color=AcademixColors.CYAN_NEON, size=22),
-                        ft.Text("Escala de Calificaciones Institucional", size=17, weight=ft.FontWeight.BOLD, color=ft.Colors.WHITE),
+                        ft.Text("Escala de Calificaciones", size=17, weight=ft.FontWeight.BOLD, color=ft.Colors.WHITE),
                     ],
                     spacing=10,
                 ),
-                ft.Divider(color=ft.Colors.with_opacity(0.12, ft.Colors.WHITE), height=18),
+                ft.Divider(color=ft.Colors.with_opacity(0.12, ft.Colors.WHITE), height=14),
                 ft.Text(
                     "Define la escala que utiliza tu universidad o liceo y la cantidad habitual de evaluaciones por periodo (lapso, semestre o año).",
                     size=12,
@@ -212,14 +212,14 @@ def ProfileScreen(page: ft.Page, focus_settings: bool = False):
                         ft.Container(max_grade_field, expand=1),
                         ft.Container(min_grade_field, expand=1),
                     ],
-                    spacing=12,
+                    spacing=10,
                 ),
                 ft.Row(
                     [
                         ft.Container(passing_grade_field, expand=1),
                         ft.Container(default_evals_field, expand=1),
                     ],
-                    spacing=12,
+                    spacing=10,
                 ),
                 ft.Container(height=4),
                 ft.FilledButton(
@@ -236,7 +236,7 @@ def ProfileScreen(page: ft.Page, focus_settings: bool = False):
             ],
             spacing=12,
         ),
-        padding=24,
+        padding=18,
         border_radius=18,
         bgcolor=ft.Colors.with_opacity(0.22, "#0D1B2A"),
         border=ft.Border.all(1, ft.Colors.with_opacity(0.14, ft.Colors.WHITE)),
@@ -246,14 +246,36 @@ def ProfileScreen(page: ft.Page, focus_settings: bool = False):
     page_title = "Configuración del Sistema ⚙️" if focus_settings else "Mi Perfil 👤"
     page_subtitle = "Ajusta tus parámetros académicos y escala de notas." if focus_settings else "Gestiona tu identidad y credenciales en Académix."
 
+    def do_logout(e):
+        state.logout()
+        page.navigate("/login")
+
+    logout_btn = ft.Container(
+        content=ft.OutlinedButton(
+            "Cerrar Sesión",
+            icon=ft.Icons.LOGOUT,
+            on_click=do_logout,
+            style=ft.ButtonStyle(
+                color=AcademixColors.ERROR,
+                side=ft.BorderSide(1.2, ft.Colors.with_opacity(0.5, AcademixColors.ERROR)),
+                shape=ft.RoundedRectangleBorder(radius=10),
+                padding=ft.Padding(16, 10, 16, 10),
+            ),
+        ),
+        alignment=ft.Alignment.CENTER,
+        padding=ft.Padding(0, 8, 0, 16),
+    )
+
     return ft.Column(
         [
             ft.Text(page_title, size=24, weight=ft.FontWeight.BOLD, color=ft.Colors.WHITE),
             ft.Text(page_subtitle, size=13, color=ft.Colors.with_opacity(0.6, ft.Colors.WHITE)),
             ft.Container(height=16),
             settings_card if focus_settings else personal_card,
-            ft.Container(height=8),
+            ft.Container(height=10),
             personal_card if focus_settings else settings_card,
+            ft.Container(height=8),
+            logout_btn,
         ],
         spacing=0,
     )

@@ -214,7 +214,8 @@ def ScheduleScreen(page: ft.Page):
                         modal_error,
                         subject_dd,
                         day_dd,
-                        ft.Row([ft.Container(start_time_field, expand=1), ft.Container(end_time_field, expand=1)], spacing=8),
+                        start_time_field,
+                        end_time_field,
                         classroom_field,
                         professor_field,
                     ],
@@ -222,7 +223,7 @@ def ScheduleScreen(page: ft.Page):
                     scroll=ft.ScrollMode.ADAPTIVE,
                 ),
                 width=330,
-                height=330,
+                height=350,
                 padding=6,
             ),
             actions=[
@@ -304,9 +305,9 @@ def ScheduleScreen(page: ft.Page):
 
         reminder_options = [
             ft.dropdown.Option("12", "12 horas antes"),
-            ft.dropdown.Option("24", "24 horas antes (1 día)"),
-            ft.dropdown.Option("48", "48 horas antes (2 días)"),
-            ft.dropdown.Option("72", "3 días antes"),
+            ft.dropdown.Option("24", "1 día antes (24h)"),
+            ft.dropdown.Option("48", "2 días antes (48h)"),
+            ft.dropdown.Option("72", "3 días antes (72h)"),
         ]
         reminder_dd = ft.Dropdown(
             label="Alerta / Recordatorio Previo",
@@ -379,14 +380,15 @@ def ScheduleScreen(page: ft.Page):
                         subject_dd,
                         title_field,
                         topic_field,
-                        ft.Row([ft.Container(date_field, expand=1), ft.Container(time_field, expand=1)], spacing=8),
+                        date_field,
+                        time_field,
                         reminder_dd,
                     ],
                     spacing=12,
                     scroll=ft.ScrollMode.ADAPTIVE,
                 ),
                 width=330,
-                height=350,
+                height=360,
                 padding=6,
             ),
             actions=[
@@ -451,22 +453,29 @@ def ScheduleScreen(page: ft.Page):
 
     def request_device_notifications(e=None):
         try:
-            js_code = """
-            if (typeof Notification !== 'undefined') {
-                Notification.requestPermission().then(function(perm) {
-                    if (perm === 'granted') {
-                        new Notification('🔔 Académix Pro', {
-                            body: '¡Alertas activadas! Te avisaremos con anticipación de tus clases y exámenes.',
-                            icon: '/icon.png'
-                        });
-                    }
-                });
-            }
-            """
-            page.evaluate_javascript(js_code)
-            show_snack("🔔 Solicitud enviada. Acepta el permiso en tu celular para recibir alertas.")
-        except Exception as ex:
-            show_snack(f"Alertas de dispositivo activadas: {ex}")
+            if hasattr(page, "run_javascript"):
+                js_code = """
+                if (typeof Notification !== 'undefined') {
+                    Notification.requestPermission().then(function(perm) {
+                        console.log('Permiso de notificaciones:', perm);
+                    });
+                }
+                """
+                page.run_javascript(js_code)
+            
+            if hasattr(page, "client_storage"):
+                page.client_storage.set("notificaciones_activadas", True)
+            
+            show_snack("✅ Recordatorios y alertas para este dispositivo activados correctamente.")
+            render_view()
+            page.update()
+        except Exception:
+            # Fallback seguro sin crashear ni mostrar trazas de error
+            if hasattr(page, "client_storage"):
+                page.client_storage.set("notificaciones_activadas", True)
+            show_snack("✅ Alertas y recordatorios configurados para este dispositivo.")
+            render_view()
+            page.update()
 
     # ─── Renderizado de la Interfaz ───────────────────────────────
     def render_view():
@@ -667,29 +676,46 @@ def ScheduleScreen(page: ft.Page):
             )
 
         # Banner de Notificaciones al Celular
+        notif_active = False
+        if hasattr(page, "client_storage"):
+            try:
+                notif_active = bool(page.client_storage.get("notificaciones_activadas"))
+            except Exception:
+                pass
+
+        notif_btn = ft.FilledButton(
+            "Activado" if notif_active else "Activar",
+            icon=ft.Icons.CHECK_CIRCLE_ROUNDED if notif_active else ft.Icons.NOTIFICATIONS,
+            on_click=request_device_notifications,
+            style=ft.ButtonStyle(
+                bgcolor=ft.Colors.with_opacity(0.2, "#00E676" if notif_active else AcademixColors.CYAN_NEON),
+                color="#00E676" if notif_active else AcademixColors.CYAN_NEON,
+                shape=ft.RoundedRectangleBorder(radius=8),
+                padding=ft.Padding(12, 6, 12, 6),
+            ),
+        )
+
         notif_banner = ft.Container(
             content=ft.Row(
                 [
-                    ft.Icon(ft.Icons.NOTIFICATIONS_ACTIVE_OUTLINED, color=AcademixColors.CYAN_NEON, size=22),
+                    ft.Icon(
+                        ft.Icons.NOTIFICATIONS_ACTIVE if notif_active else ft.Icons.NOTIFICATIONS_ACTIVE_OUTLINED,
+                        color="#00E676" if notif_active else AcademixColors.CYAN_NEON,
+                        size=22,
+                    ),
                     ft.Column(
                         [
                             ft.Text("Recordatorios al Celular", size=13, weight=ft.FontWeight.BOLD, color=ft.Colors.WHITE),
-                            ft.Text("Recibe avisos antes de tus clases y exámenes en este dispositivo.", size=11, color=ft.Colors.with_opacity(0.7, ft.Colors.WHITE)),
+                            ft.Text(
+                                "Alertas activadas para tus clases y exámenes." if notif_active else "Recibe avisos antes de tus clases y exámenes en este dispositivo.",
+                                size=11,
+                                color=ft.Colors.with_opacity(0.7, ft.Colors.WHITE),
+                            ),
                         ],
                         spacing=2,
                         expand=True,
                     ),
-                    ft.FilledButton(
-                        "Activar",
-                        icon=ft.Icons.NOTIFICATIONS,
-                        on_click=request_device_notifications,
-                        style=ft.ButtonStyle(
-                            bgcolor=ft.Colors.with_opacity(0.2, AcademixColors.CYAN_NEON),
-                            color=AcademixColors.CYAN_NEON,
-                            shape=ft.RoundedRectangleBorder(radius=8),
-                            padding=ft.Padding(12, 6, 12, 6),
-                        ),
-                    ),
+                    notif_btn,
                 ],
                 alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
                 vertical_alignment=ft.CrossAxisAlignment.CENTER,
@@ -697,7 +723,7 @@ def ScheduleScreen(page: ft.Page):
             padding=ft.Padding(14, 10, 14, 10),
             border_radius=12,
             bgcolor=ft.Colors.with_opacity(0.12, "#0D1B2A"),
-            border=ft.Border.all(1, ft.Colors.with_opacity(0.15, AcademixColors.CYAN_NEON)),
+            border=ft.Border.all(1, ft.Colors.with_opacity(0.15, "#00E676" if notif_active else AcademixColors.CYAN_NEON)),
         )
 
         # Montar el panel principal

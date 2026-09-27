@@ -672,13 +672,13 @@ def _section_calculator(page: ft.Page):
                     card_icon = ft.Icons.TASK_ALT_ROUNDED
                 elif not es_posible or estado == "imposible":
                     card_border = AcademixColors.ERROR
-                    title_text = "Meta fuera de rango matemático ⚠️"
+                    title_text = "Meta fuera de rango ⚠️"
                     score_main = f"{req_val:.2f} pts" if req_val else "Excede límite"
                     badge_info = f"Nota máxima alcanzable ahora: {max_pos:.2f} / {max_g:.0f}"
                     card_icon = ft.Icons.REPORT_PROBLEM_ROUNDED
                 else:
                     card_border = AcademixColors.CYAN_NEON
-                    title_text = "Nota requerida por evaluación restante:"
+                    title_text = "Nota requerida por evaluación:"
                     score_main = f"{req_val:.2f} / {max_g:.0f}" if req_val is not None else "0.0"
                     badge_info = f"En cada una de las {restantes} evaluaciones que te faltan"
                     card_icon = ft.Icons.AUTO_GRAPH_ROUNDED
@@ -687,10 +687,10 @@ def _section_calculator(page: ft.Page):
                     [
                         ft.Row(
                             [
-                                ft.Icon(card_icon, color=card_border, size=24),
-                                ft.Text(title_text, size=15, weight=ft.FontWeight.BOLD, color=card_border),
+                                ft.Icon(card_icon, color=card_border, size=22),
+                                ft.Text(title_text, size=15, weight=ft.FontWeight.BOLD, color=card_border, expand=True),
                             ],
-                            spacing=10,
+                            spacing=8,
                             vertical_alignment=ft.CrossAxisAlignment.CENTER,
                         ),
                         ft.Text(score_main, size=32, weight=ft.FontWeight.W_900, color=ft.Colors.WHITE),

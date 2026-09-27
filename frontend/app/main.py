@@ -38,9 +38,13 @@ def main(page: ft.Page):
                     if me_resp.status_code == 200:
                         state.set_user(me_resp.json())
                     elif me_resp.status_code == 401:
-                        state.logout()
-                        if page.route not in ["/login", "/register"]:
-                            page.navigate("/login")
+                        import time
+                        time.sleep(2)
+                        retry_resp = api.get_me()
+                        if retry_resp.status_code == 401:
+                            state.logout()
+                            if page.route not in ["/login", "/register"]:
+                                page.navigate("/login")
                 except Exception:
                     pass
             threading.Thread(target=_validate_session, daemon=True).start()
