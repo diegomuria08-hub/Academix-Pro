@@ -9,7 +9,7 @@ from app.db.models.academic import (
     AcademicEvent,
     PrediccionNota,
 )
-from app.db.models.users import User, AcademicSettings
+from app.db.models.users import User, UserProfile, AcademicSettings
 from app.schemas.academic import (
     AcademicPeriodCreate,
     SubjectCreate,
@@ -45,6 +45,7 @@ def get_or_create_active_period(db: Session, user_id: str, student_type: str = N
 
     is_liceo = student_type in ["high_school", "StudentType.high_school"]
     target_tag = "[Liceo]" if is_liceo else "[Universidad]"
+    other_tag = "[Universidad]" if is_liceo else "[Liceo]"
     default_name = "Año Escolar (Liceo) [Liceo]" if is_liceo else "Semestre Universitario [Universidad]"
 
     # Buscar periodo activo actual
@@ -54,14 +55,23 @@ def get_or_create_active_period(db: Session, user_id: str, student_type: str = N
         .first()
     )
 
-    # Si hay un periodo activo y coincide con la modalidad, usarlo
+    # Si hay un periodo activo:
     if active_period:
         if target_tag in active_period.name:
             return active_period
-        # Si no coincide (por ejemplo, el usuario era Liceo y cambió a Universidad o viceversa),
-        # desactivamos el periodo anterior para no mezclar materias, pero conservando todo su historial
+        
+        # Si el periodo no tiene etiqueta de la otra modalidad, asumimos que es el de la modalidad actual
+        if other_tag not in active_period.name:
+            active_period.name = f"{active_period.name} {target_tag}".strip()
+            db.add(active_period)
+            db.commit()
+            db.refresh(active_period)
+            return active_period
+
+        # Si pertenece explícitamente a la otra modalidad, desactivarlo sin borrar nada
         active_period.is_active = False
         db.add(active_period)
+        db.commit()
 
     # Buscar si ya existía un periodo previo para la modalidad seleccionada
     existing_period = (

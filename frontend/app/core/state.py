@@ -13,6 +13,7 @@ class AppState:
             cls._instance = super(AppState, cls).__new__(cls)
             cls._instance.current_user = None
             cls._instance.page = None
+            cls._instance.cached_subjects = []
         return cls._instance
 
     def set_user(self, user_data: dict):
