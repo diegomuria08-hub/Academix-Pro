@@ -102,22 +102,36 @@ def open_author_rights_dialog(page: ft.Page):
 
 def build_copyright_footer(page: ft.Page, is_compact: bool = False):
     """
-    Footer responsivo y elegante que firma todas las hojas con los derechos reservados de Diego Muria.
+    Footer 100% responsivo y Mobile-First que presenta los derechos reservados
+    de Diego Muria organizados coherentemente uno debajo de otro para evitar cualquier
+    desbordamiento de pantalla en cualquier dispositivo móvil o tablet.
     """
     if is_compact:
         return ft.Container(
-            content=ft.Row(
+            content=ft.Column(
                 [
-                    ft.Icon(ft.Icons.VERIFIED_ROUNDED, color=AcademixColors.CYAN_NEON, size=13),
+                    ft.Row(
+                        [
+                            ft.Icon(ft.Icons.VERIFIED_ROUNDED, color=AcademixColors.CYAN_NEON, size=12),
+                            ft.Text(
+                                "Derechos reservados — Diego Muria",
+                                size=10,
+                                weight=ft.FontWeight.BOLD,
+                                color=ft.Colors.WHITE,
+                            ),
+                        ],
+                        alignment=ft.MainAxisAlignment.CENTER,
+                        spacing=4,
+                    ),
                     ft.Text(
-                        "© 2026 Diego Muria • Ing. de Sistemas IUPSM",
-                        size=10,
-                        color=ft.Colors.with_opacity(0.7, ft.Colors.WHITE),
-                        overflow=ft.TextOverflow.ELLIPSIS,
+                        "Ing. de Sistemas IUPSM • © 2026",
+                        size=9,
+                        color=ft.Colors.with_opacity(0.65, ft.Colors.WHITE),
+                        text_align=ft.TextAlign.CENTER,
                     ),
                 ],
-                alignment=ft.MainAxisAlignment.CENTER,
-                spacing=4,
+                spacing=2,
+                horizontal_alignment=ft.CrossAxisAlignment.CENTER,
             ),
             padding=ft.Padding(4, 6, 4, 6),
             on_click=lambda _: open_author_rights_dialog(page),
@@ -129,37 +143,37 @@ def build_copyright_footer(page: ft.Page, is_compact: bool = False):
             [
                 ft.Row(
                     [
-                        ft.Icon(ft.Icons.VERIFIED_USER_ROUNDED, color=AcademixColors.CYAN_NEON, size=14),
+                        ft.Icon(ft.Icons.VERIFIED_USER_ROUNDED, color=AcademixColors.CYAN_NEON, size=13),
                         ft.Text(
-                            "Derechos reservados para Diego Muria — Estudiante de Ingeniería de Sistemas del IUPSM",
+                            "Derechos reservados para Diego Muria",
                             size=11,
-                            weight=ft.FontWeight.W_500,
-                            color=ft.Colors.with_opacity(0.85, ft.Colors.WHITE),
+                            weight=ft.FontWeight.BOLD,
+                            color=ft.Colors.WHITE,
                             text_align=ft.TextAlign.CENTER,
                         ),
                     ],
                     alignment=ft.MainAxisAlignment.CENTER,
-                    spacing=6,
+                    spacing=5,
                 ),
-                ft.Row(
-                    [
-                        ft.Icon(ft.Icons.SHIELD_OUTLINED, color=ft.Colors.with_opacity(0.5, AcademixColors.CYAN_NEON), size=11),
-                        ft.Text(
-                            "Académix Pro © 2026 • Propiedad Intelectual Protegida • Sistema Anti-Copia",
-                            size=9.5,
-                            color=ft.Colors.with_opacity(0.5, ft.Colors.WHITE),
-                            text_align=ft.TextAlign.CENTER,
-                        ),
-                    ],
-                    alignment=ft.MainAxisAlignment.CENTER,
-                    spacing=4,
+                ft.Text(
+                    "Estudiante de Ingeniería de Sistemas — IUPSM",
+                    size=10,
+                    weight=ft.FontWeight.W_500,
+                    color=AcademixColors.CYAN_NEON,
+                    text_align=ft.TextAlign.CENTER,
+                ),
+                ft.Text(
+                    "Académix Pro © 2026 • Propiedad Intelectual Protegida",
+                    size=8.5,
+                    color=ft.Colors.with_opacity(0.5, ft.Colors.WHITE),
+                    text_align=ft.TextAlign.CENTER,
                 ),
             ],
             spacing=2,
             horizontal_alignment=ft.CrossAxisAlignment.CENTER,
         ),
-        padding=ft.Padding(8, 10, 8, 10),
-        alignment=ft.Alignment(0, 0),
+        padding=ft.Padding(6, 8, 6, 8),
+        alignment=ft.Alignment.CENTER,
         on_click=lambda _: open_author_rights_dialog(page),
         tooltip="Haz clic para ver el certificado de autoría y derechos reservados",
     )

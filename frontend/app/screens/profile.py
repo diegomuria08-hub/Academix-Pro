@@ -310,10 +310,11 @@ def ProfileScreen(page: ft.Page, focus_settings: bool = False):
             [
                 ft.Row(
                     [
-                        ft.Icon(icon=ft.Icons.VERIFIED_USER_ROUNDED, color=AcademixColors.CYAN_NEON, size=22),
-                        ft.Text("Derechos de Autor y Desarrollador Oficial", size=16, weight=ft.FontWeight.BOLD, color=ft.Colors.WHITE),
+                        ft.Icon(icon=ft.Icons.VERIFIED_USER_ROUNDED, color=AcademixColors.CYAN_NEON, size=20),
+                        ft.Text("Derechos de Autor & Desarrollador Oficial", size=14, weight=ft.FontWeight.BOLD, color=ft.Colors.WHITE, expand=True),
                     ],
-                    spacing=10,
+                    spacing=8,
+                    vertical_alignment=ft.CrossAxisAlignment.CENTER,
                 ),
                 ft.Divider(color=ft.Colors.with_opacity(0.12, ft.Colors.WHITE), height=14),
                 ft.Row(
@@ -340,15 +341,20 @@ def ProfileScreen(page: ft.Page, focus_settings: bool = False):
                     size=11,
                     color=ft.Colors.with_opacity(0.7, ft.Colors.WHITE),
                 ),
-                ft.OutlinedButton(
-                    "Ver Certificado de Derechos de Autor",
-                    icon=ft.Icons.SHIELD_ROUNDED,
-                    on_click=lambda _: open_author_rights_dialog(page),
-                    style=ft.ButtonStyle(
-                        color=AcademixColors.CYAN_NEON,
-                        side=ft.BorderSide(1, AcademixColors.CYAN_NEON),
-                        shape=ft.RoundedRectangleBorder(radius=10),
-                    ),
+                ft.Row(
+                    [
+                        ft.OutlinedButton(
+                            "Ver Certificado de Derechos de Autor",
+                            icon=ft.Icons.SHIELD_ROUNDED,
+                            on_click=lambda _: open_author_rights_dialog(page),
+                            style=ft.ButtonStyle(
+                                color=AcademixColors.CYAN_NEON,
+                                side=ft.BorderSide(1, AcademixColors.CYAN_NEON),
+                                shape=ft.RoundedRectangleBorder(radius=10),
+                            ),
+                        ),
+                    ],
+                    alignment=ft.MainAxisAlignment.CENTER,
                 ),
             ],
             spacing=10,
