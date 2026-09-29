@@ -726,6 +726,7 @@ def SubjectsScreen(page: ft.Page, view_mode: str = "notas"):
         sub_id = sub["id"]
         evals = sub.get("evaluations", [])
         is_liceo = is_student_high_school()
+        tot_lapsos = get_total_lapsos()
 
         # Métricas del Motor de Cálculo Adaptativo
         accum_pts = sub.get("accumulated_points", 0.0)
@@ -1215,7 +1216,7 @@ def SubjectsScreen(page: ft.Page, view_mode: str = "notas"):
                         expand=True,
                     ),
                     ft.FilledButton(
-                        "+ Materia",
+                        "Materia",
                         icon=ft.Icons.ADD_ROUNDED,
                         on_click=lambda _: open_subject_modal(),
                         style=ft.ButtonStyle(

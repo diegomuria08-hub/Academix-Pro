@@ -122,11 +122,62 @@ class ComprehensiveFrontendAudit(unittest.TestCase):
         print(f"[OK] ScheduleScreen and {len(buttons)} interactive buttons/modals verified without errors.")
 
     def test_06_subjects_screen(self):
-        print("Testing SubjectsScreen...")
+        print("Testing SubjectsScreen for University and High School...")
         from app.screens.subjects import SubjectsScreen
-        view = SubjectsScreen(self.page)
-        self.assertIsNotNone(view)
-        print("[OK] SubjectsScreen mounted successfully.")
+        from unittest.mock import patch
+
+        # 1. Modo Universidad
+        view_uni = SubjectsScreen(self.page)
+        self.assertIsNotNone(view_uni)
+
+        # 2. Modo Liceo con materias y evaluaciones
+        state.current_user["profile"]["student_type"] = "high_school"
+        state.current_user["settings"]["evaluation_mode"] = "liceo"
+        state.current_user["settings"]["total_lapsos"] = 3
+        state.current_user["settings"]["current_lapso"] = 2
+
+        mock_subjects = [
+            {
+                "id": "sub-101",
+                "name": "Física Cuántica",
+                "credits": 4,
+                "color_hex": "#00E5FF",
+                "max_scale": 20.0,
+                "passing_grade": 10.0,
+                "evaluations": [
+                    {
+                        "id": "ev-1",
+                        "name": "Parcial 1 Lapso 1",
+                        "weight_percent": 50.0,
+                        "lapso_number": 1,
+                        "grade": {"score": 18.0},
+                    },
+                    {
+                        "id": "ev-2",
+                        "name": "Taller 1 Lapso 1",
+                        "weight_percent": 50.0,
+                        "lapso_number": 1,
+                        "grade": {"score": 16.0},
+                    },
+                    {
+                        "id": "ev-3",
+                        "name": "Parcial 1 Lapso 2",
+                        "weight_percent": 30.0,
+                        "lapso_number": 2,
+                        "grade": None,
+                    }
+                ],
+            }
+        ]
+
+        with patch("app.screens.subjects.api") as mock_api:
+            mock_api.get_subjects.return_value.status_code = 200
+            mock_api.get_subjects.return_value.json.return_value = mock_subjects
+
+            view_liceo = SubjectsScreen(self.page)
+            self.assertIsNotNone(view_liceo)
+
+        print("[OK] SubjectsScreen mounted and rendered for both University and High School with subjects successfully.")
 
     def test_07_dashboard_screen(self):
         print("Testing DashboardScreen and internal tabs...")
