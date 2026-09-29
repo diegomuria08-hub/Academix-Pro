@@ -33,24 +33,65 @@ from fastapi import HTTPException
 import uuid
 
 
-def get_or_create_active_period(db: Session, user_id: str) -> AcademicPeriod:
-    """Retorna el periodo académico activo o crea uno por defecto si no existe."""
-    period = (
+def get_or_create_active_period(db: Session, user_id: str, student_type: str = None) -> AcademicPeriod:
+    """
+    Retorna el periodo académico activo del usuario adaptado a su modalidad actual (Liceo o Universidad).
+    Permite alternar entre modalidades académicas sin perder materias, evaluaciones ni datos históricos de ninguna etapa.
+    """
+    if student_type is None:
+        user_prof = db.query(UserProfile).filter(UserProfile.user_id == user_id).first()
+        st_val = user_prof.student_type if user_prof else "university"
+        student_type = st_val.value if hasattr(st_val, "value") else str(st_val)
+
+    is_liceo = student_type in ["high_school", "StudentType.high_school"]
+    target_tag = "[Liceo]" if is_liceo else "[Universidad]"
+    default_name = "Año Escolar (Liceo) [Liceo]" if is_liceo else "Semestre Universitario [Universidad]"
+
+    # Buscar periodo activo actual
+    active_period = (
         db.query(AcademicPeriod)
         .filter(AcademicPeriod.user_id == user_id, AcademicPeriod.is_active == True)
         .first()
     )
-    if not period:
-        period = AcademicPeriod(
-            id=str(uuid.uuid4()),
-            user_id=user_id,
-            name="Periodo Académico Actual",
-            is_active=True,
+
+    # Si hay un periodo activo y coincide con la modalidad, usarlo
+    if active_period:
+        if target_tag in active_period.name:
+            return active_period
+        # Si no coincide (por ejemplo, el usuario era Liceo y cambió a Universidad o viceversa),
+        # desactivamos el periodo anterior para no mezclar materias, pero conservando todo su historial
+        active_period.is_active = False
+        db.add(active_period)
+
+    # Buscar si ya existía un periodo previo para la modalidad seleccionada
+    existing_period = (
+        db.query(AcademicPeriod)
+        .filter(
+            AcademicPeriod.user_id == user_id,
+            AcademicPeriod.name.like(f"%{target_tag}%")
         )
-        db.add(period)
+        .order_by(AcademicPeriod.id.desc())
+        .first()
+    )
+
+    if existing_period:
+        existing_period.is_active = True
+        db.add(existing_period)
         db.commit()
-        db.refresh(period)
-    return period
+        db.refresh(existing_period)
+        return existing_period
+
+    # Si nunca ha tenido un periodo en esta modalidad, crear uno nuevo
+    new_period = AcademicPeriod(
+        id=str(uuid.uuid4()),
+        user_id=user_id,
+        name=default_name,
+        is_active=True,
+    )
+    db.add(new_period)
+    db.commit()
+    db.refresh(new_period)
+    return new_period
 
 
 def calculate_subject_metrics(

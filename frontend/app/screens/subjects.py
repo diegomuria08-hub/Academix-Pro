@@ -141,6 +141,87 @@ def SubjectsScreen(page: ft.Page, view_mode: str = "notas"):
         )
         page.show_dialog(snack)
 
+    lapso_bar_container = ft.Container(visible=is_student_high_school())
+
+    def render_lapso_bar():
+        if not is_student_high_school():
+            lapso_bar_container.visible = False
+            return
+        lapso_bar_container.visible = True
+        total_l = get_total_lapsos()
+        current_cursando = get_initial_lapso()
+        lapso_buttons = []
+        for l_idx in range(1, total_l + 1):
+            is_active = (l_idx == selected_lapso[0])
+            is_current = (l_idx == current_cursando)
+
+            def make_change_lapso(idx):
+                def _change(e):
+                    selected_lapso[0] = idx
+                    render_lapso_bar()
+                    render_subjects(current_subjects_cache)
+                    try:
+                        page.update()
+                    except Exception:
+                        pass
+                return _change
+
+            lapso_buttons.append(
+                ft.Container(
+                    content=ft.Row(
+                        [
+                            ft.Icon(
+                                ft.Icons.CHECK_CIRCLE if is_active else (ft.Icons.PLAY_ARROW_ROUNDED if is_current else ft.Icons.RADIO_BUTTON_UNCHECKED),
+                                size=13,
+                                color=AcademixColors.CYAN_NEON if is_active else (AcademixColors.YELLOW_NEON if is_current else ft.Colors.with_opacity(0.45, ft.Colors.WHITE)),
+                            ),
+                            ft.Column(
+                                [
+                                    ft.Text(f"{l_idx}º Lapso", size=11.5, weight=ft.FontWeight.BOLD if is_active else ft.FontWeight.NORMAL, color=ft.Colors.WHITE if is_active else ft.Colors.with_opacity(0.75, ft.Colors.WHITE)),
+                                    *( [ft.Text("Actual", size=9, weight=ft.FontWeight.BOLD, color=AcademixColors.YELLOW_NEON)] if is_current else [] ),
+                                ],
+                                spacing=0,
+                                alignment=ft.MainAxisAlignment.CENTER,
+                                horizontal_alignment=ft.CrossAxisAlignment.CENTER,
+                            ),
+                        ],
+                        spacing=4,
+                        alignment=ft.MainAxisAlignment.CENTER,
+                        vertical_alignment=ft.CrossAxisAlignment.CENTER,
+                    ),
+                    bgcolor=ft.Colors.with_opacity(0.24 if is_active else 0.06, AcademixColors.CYAN_NEON if is_active else ft.Colors.WHITE),
+                    border=ft.Border.all(1.5 if is_active else 1, AcademixColors.CYAN_NEON if is_active else (AcademixColors.YELLOW_NEON if is_current else ft.Colors.with_opacity(0.18, ft.Colors.WHITE))),
+                    border_radius=10,
+                    padding=ft.Padding(4, 7, 4, 7),
+                    expand=1,
+                    on_click=make_change_lapso(l_idx),
+                )
+            )
+
+        lapso_bar_container.content = ft.Column(
+            [
+                ft.Row(
+                    [
+                        ft.Row(
+                            [
+                                ft.Icon(ft.Icons.CALENDAR_MONTH, size=15, color=AcademixColors.CYAN_NEON),
+                                ft.Text(f"Visualizando: {selected_lapso[0]}º Lapso", size=12, weight=ft.FontWeight.BOLD, color=ft.Colors.WHITE),
+                            ],
+                            spacing=6,
+                        ),
+                        ft.Text(f"Cursando: {current_cursando}º Lapso", size=11, weight=ft.FontWeight.BOLD, color=AcademixColors.YELLOW_NEON),
+                    ],
+                    alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
+                ),
+                ft.Row(lapso_buttons, spacing=6),
+            ],
+            spacing=8,
+        )
+        lapso_bar_container.padding = 12
+        lapso_bar_container.border_radius = 14
+        lapso_bar_container.bgcolor = ft.Colors.with_opacity(0.18, "#0D1B2A")
+        lapso_bar_container.border = ft.Border.all(1, ft.Colors.with_opacity(0.15, ft.Colors.WHITE))
+
     import threading
 
     def load_data(force: bool = False):
@@ -164,6 +245,8 @@ def SubjectsScreen(page: ft.Page, view_mode: str = "notas"):
                     current_subjects_cache.clear()
                     current_subjects_cache.extend(subjects)
                     state.cached_subjects = current_subjects_cache
+                    selected_lapso[0] = get_initial_lapso()
+                    render_lapso_bar()
                     render_subjects(subjects)
                 else:
                     show_snack("Error al cargar materias de la base de datos", error=True)
@@ -177,7 +260,9 @@ def SubjectsScreen(page: ft.Page, view_mode: str = "notas"):
                 except Exception:
                     pass
 
-        # Renderizar al instante con datos en memoria
+        # Renderizar al instante con datos en memoria sincronizando con el lapso del usuario
+        selected_lapso[0] = get_initial_lapso()
+        render_lapso_bar()
         render_subjects(current_subjects_cache)
         threading.Thread(target=_fetch, daemon=True).start()
 
@@ -854,6 +939,7 @@ def SubjectsScreen(page: ft.Page, view_mode: str = "notas"):
                 
                 def on_chip_click(e, ln=l_num):
                     selected_lapso[0] = ln
+                    render_lapso_bar()
                     render_subjects(current_subjects_cache)
                     try:
                         page.update()
@@ -874,11 +960,12 @@ def SubjectsScreen(page: ft.Page, view_mode: str = "notas"):
 
             # Badge de Definitiva Anual
             annual_def = sub.get("annual_definitiva")
+            lapsos_evaluados = len([item for item in sub.get("lapsos_summary", []) if item.get("grade") is not None])
             if annual_def is not None:
-                def_text = f"Definitiva Anual: {annual_def:.2f} / {int(max_scale)} pts"
+                def_text = f"Definitiva Anual: {annual_def:.2f} / {int(max_scale)} pts ({lapsos_evaluados} de {tot_lapsos} lapsos evaluados)"
                 def_col = AcademixColors.SUCCESS if annual_def >= passing_grade else AcademixColors.ERROR
             else:
-                def_text = "Definitiva Anual: En progreso"
+                def_text = f"Definitiva Anual: En progreso (0 de {tot_lapsos} lapsos evaluados)"
                 def_col = ft.Colors.with_opacity(0.7, ft.Colors.WHITE)
 
             annual_badge = ft.Container(
@@ -1115,70 +1202,6 @@ def SubjectsScreen(page: ft.Page, view_mode: str = "notas"):
     # Cargar datos al iniciar
     load_data()
 
-    # Barra selectora superior de Lapsos para Liceo
-    lapso_bar_controls = []
-    if is_student_high_school():
-        total_l = get_total_lapsos()
-        lapso_buttons = []
-        for l_idx in range(1, total_l + 1):
-            is_active = (l_idx == selected_lapso[0])
-            def make_change_lapso(idx):
-                def _change(e):
-                    selected_lapso[0] = idx
-                    render_subjects(current_subjects_cache)
-                    try:
-                        page.update()
-                    except Exception:
-                        pass
-                return _change
-
-            lapso_buttons.append(
-                ft.Container(
-                    content=ft.Row(
-                        [
-                            ft.Icon(ft.Icons.CHECK_CIRCLE if is_active else ft.Icons.RADIO_BUTTON_UNCHECKED, size=14, color=AcademixColors.CYAN_NEON if is_active else ft.Colors.with_opacity(0.6, ft.Colors.WHITE)),
-                            ft.Text(f"{l_idx}º Lapso", size=12, weight=ft.FontWeight.BOLD if is_active else ft.FontWeight.NORMAL, color=ft.Colors.WHITE if is_active else ft.Colors.with_opacity(0.7, ft.Colors.WHITE)),
-                        ],
-                        spacing=6,
-                        alignment=ft.MainAxisAlignment.CENTER,
-                    ),
-                    bgcolor=ft.Colors.with_opacity(0.25 if is_active else 0.08, AcademixColors.CYAN_NEON if is_active else ft.Colors.WHITE),
-                    border=ft.Border.all(1.5 if is_active else 1, AcademixColors.CYAN_NEON if is_active else ft.Colors.with_opacity(0.2, ft.Colors.WHITE)),
-                    border_radius=10,
-                    padding=ft.Padding(12, 8, 12, 8),
-                    on_click=make_change_lapso(l_idx),
-                )
-            )
-
-        lapso_bar_controls.append(
-            ft.Container(
-                content=ft.Column(
-                    [
-                        ft.Row(
-                            [
-                                ft.Row(
-                                    [
-                                        ft.Icon(ft.Icons.CALENDAR_MONTH, size=16, color=AcademixColors.CYAN_NEON),
-                                        ft.Text("Visualizando Lapso Escolar:", size=12, weight=ft.FontWeight.BOLD, color=ft.Colors.WHITE),
-                                    ],
-                                    spacing=6,
-                                ),
-                                ft.Text(f"{total_l} Lapsos en el Año Escolar", size=11, color=ft.Colors.with_opacity(0.6, ft.Colors.WHITE)),
-                            ],
-                            alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
-                        ),
-                        ft.Row(lapso_buttons, spacing=8, wrap=True),
-                    ],
-                    spacing=8,
-                ),
-                padding=12,
-                border_radius=14,
-                bgcolor=ft.Colors.with_opacity(0.18, "#0D1B2A"),
-                border=ft.Border.all(1, ft.Colors.with_opacity(0.15, ft.Colors.WHITE)),
-            )
-        )
-        lapso_bar_controls.append(ft.Container(height=8))
-
     return ft.Column(
         [
             ft.Row(
@@ -1207,7 +1230,8 @@ def SubjectsScreen(page: ft.Page, view_mode: str = "notas"):
                 vertical_alignment=ft.CrossAxisAlignment.CENTER,
             ),
             ft.Container(height=10),
-            *lapso_bar_controls,
+            lapso_bar_container,
+            ft.Container(height=8 if is_student_high_school() else 0),
             loading_ring,
             subjects_container,
             ft.Container(height=20),

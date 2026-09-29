@@ -50,15 +50,37 @@ def create_user(db: Session, user_in: UserCreate) -> User:
     return db_user
 
 def update_user_profile(db: Session, user: User, profile_in: UserProfileUpdate) -> User:
-    """Actualiza los datos del perfil del usuario."""
+    """Actualiza los datos del perfil del usuario y sincroniza su modalidad académica."""
     profile = user.profile
     if not profile:
         raise HTTPException(status_code=404, detail="Perfil de usuario no encontrado")
     
+    old_type = profile.student_type
     update_data = profile_in.model_dump(exclude_unset=True)
     for field, value in update_data.items():
         setattr(profile, field, value)
     
+    # Si cambió la modalidad entre Liceo y Universidad
+    new_type = profile.student_type
+    if old_type != new_type:
+        new_st_str = new_type.value if hasattr(new_type, "value") else str(new_type)
+        is_liceo = new_st_str in ["high_school", "StudentType.high_school"]
+        if user.settings:
+            user.settings.evaluation_mode = "liceo" if is_liceo else "university"
+            if is_liceo:
+                user.settings.total_lapsos = 3
+                user.settings.current_lapso = 1
+                user.settings.default_eval_count = 4
+            else:
+                user.settings.total_lapsos = 1
+                user.settings.current_lapso = 1
+                user.settings.default_eval_count = 5
+            db.add(user.settings)
+        
+        # Sincronizar y activar el periodo adecuado de esa modalidad conservando el historial
+        from app.services.academic_service import get_or_create_active_period
+        get_or_create_active_period(db, user.id, new_st_str)
+
     db.add(profile)
     db.commit()
     db.refresh(user)

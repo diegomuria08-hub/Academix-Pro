@@ -98,7 +98,7 @@ def ProfileScreen(page: ft.Page, focus_settings: bool = False):
     default_evals_field = _glass_field("Evaluaciones por Lapso/Periodo", value=str(settings_data.get("default_eval_count", 4 if profile.get("student_type") == "high_school" else 5)), keyboard_type=ft.KeyboardType.NUMBER, hint_text="Ej: 4")
 
     total_lapsos_dd = ft.Dropdown(
-        label="Cantidad de Lapsos / Periodos Anuales",
+        label="Total de Lapsos del Año Escolar",
         value=str(settings_data.get("total_lapsos", 3)),
         options=[
             ft.dropdown.Option("2", "2 Lapsos / Semestres"),
@@ -113,13 +113,13 @@ def ProfileScreen(page: ft.Page, focus_settings: bool = False):
     )
 
     current_lapso_dd = ft.Dropdown(
-        label="Lapso Cursando Actualmente",
+        label="Lapso que Cursas Actualmente",
         value=str(settings_data.get("current_lapso", 1)),
         options=[
-            ft.dropdown.Option("1", "Primer Lapso (1)"),
-            ft.dropdown.Option("2", "Segundo Lapso (2)"),
-            ft.dropdown.Option("3", "Tercer Lapso (3)"),
-            ft.dropdown.Option("4", "Cuarto Lapso (4)"),
+            ft.dropdown.Option("1", "1° Lapso (Primer Lapso)"),
+            ft.dropdown.Option("2", "2° Lapso (Segundo Lapso)"),
+            ft.dropdown.Option("3", "3° Lapso (Tercer Lapso)"),
+            ft.dropdown.Option("4", "4° Lapso (Cuarto Lapso)"),
         ],
         filled=True,
         bgcolor="#0F1E36",
@@ -131,6 +131,7 @@ def ProfileScreen(page: ft.Page, focus_settings: bool = False):
     # ─── Handlers ───────────────────────────────────────────────
     def save_profile(e):
         st_val = student_type_dd.value
+        prev_st = profile.get("student_type", "university")
         data = {
             "first_name": first_name_field.value.strip() if first_name_field.value else "",
             "last_name": last_name_field.value.strip() if last_name_field.value else "",
@@ -138,18 +139,88 @@ def ProfileScreen(page: ft.Page, focus_settings: bool = False):
             "student_type": st_val,
             "avatar_url": avatar_url_field.value.strip() if avatar_url_field.value else None,
         }
-        try:
-            resp = api.update_profile(data)
-            if resp.status_code == 200:
-                updated_user = resp.json()
-                state.set_user(updated_user)
-                # Actualizar también modo de evaluación según tipo
-                api.update_settings({"evaluation_mode": "liceo" if st_val == "high_school" else "university"})
-                show_snack("✅ Perfil y modo académico guardados en la base de datos")
-            else:
-                show_snack(resp.json().get("detail", "Error al guardar perfil"), error=True)
-        except Exception as ex:
-            show_snack(f"Error de conexión: {ex}", error=True)
+
+        def execute_profile_save():
+            try:
+                resp = api.update_profile(data)
+                if resp.status_code == 200:
+                    updated_user = resp.json()
+                    state.set_user(updated_user)
+                    profile["student_type"] = st_val
+                    # Limpiar caché de materias para recargar la modalidad correspondiente
+                    state.cached_subjects.clear()
+                    show_snack("✅ Perfil y modalidad académica guardados en la base de datos")
+                    try:
+                        page.update()
+                    except Exception:
+                        pass
+                else:
+                    show_snack(resp.json().get("detail", "Error al guardar perfil"), error=True)
+            except Exception as ex:
+                show_snack(f"Error de conexión: {ex}", error=True)
+
+        if st_val != prev_st:
+            old_label = "Liceo / Bachillerato" if prev_st == "high_school" else "Universidad"
+            new_label = "Liceo / Bachillerato" if st_val == "high_school" else "Universidad"
+
+            def cancel_change(ev):
+                student_type_dd.value = prev_st
+                page.pop_dialog()
+                page.update()
+
+            def confirm_change(ev):
+                page.pop_dialog()
+                execute_profile_save()
+
+            confirm_dialog = ft.AlertDialog(
+                modal=True,
+                title=ft.Row(
+                    [
+                        ft.Icon(ft.Icons.SWAP_HORIZ_ROUNDED, color=AcademixColors.CYAN_NEON, size=22),
+                        ft.Text("Alternar Modalidad Académica", weight=ft.FontWeight.BOLD, color=ft.Colors.WHITE, size=16),
+                    ],
+                    spacing=8,
+                ),
+                content=ft.Container(
+                    content=ft.Column(
+                        [
+                            ft.Text(f"¿Deseas alternar tu modalidad de {old_label} a {new_label}?", size=13, weight=ft.FontWeight.BOLD, color=ft.Colors.WHITE),
+                            ft.Container(height=4),
+                            ft.Text(
+                                "🛡️ Respaldo Automático Activo:\n"
+                                "Todas tus materias, notas y evaluaciones anteriores quedarán guardadas de forma 100% segura en la base de datos sin borrarse.",
+                                size=12,
+                                color=AcademixColors.CYAN_NEON,
+                            ),
+                            ft.Container(height=4),
+                            ft.Text(
+                                "✨ Si cambiaste por curiosidad o error, no te preocupes: podrás volver a alternar en cualquier momento y recuperar todo tu historial intacto.",
+                                size=11.5,
+                                color=ft.Colors.with_opacity(0.75, ft.Colors.WHITE),
+                            ),
+                        ],
+                        spacing=6,
+                        tight=True,
+                    ),
+                    width=380,
+                ),
+                actions=[
+                    ft.TextButton("Cancelar", on_click=cancel_change),
+                    ft.FilledButton(
+                        "Confirmar y Guardar",
+                        icon=ft.Icons.CHECK,
+                        on_click=confirm_change,
+                        style=ft.ButtonStyle(
+                            bgcolor=AcademixColors.CYAN_NEON,
+                            color=ft.Colors.BLACK,
+                            shape=ft.RoundedRectangleBorder(radius=10),
+                        ),
+                    ),
+                ],
+            )
+            page.show_dialog(confirm_dialog)
+        else:
+            execute_profile_save()
 
     def save_settings(e):
         try:
@@ -179,6 +250,7 @@ def ProfileScreen(page: ft.Page, focus_settings: bool = False):
             if resp.status_code == 200:
                 if state.current_user:
                     state.current_user["settings"] = resp.json()
+                state.cached_subjects.clear()
                 show_snack("✅ Escala académica y configuración de lapsos guardada")
             else:
                 show_snack(resp.json().get("detail", "Error al guardar escala"), error=True)
@@ -275,12 +347,12 @@ def ProfileScreen(page: ft.Page, focus_settings: bool = False):
                     size=11.5,
                     color=ft.Colors.with_opacity(0.65, ft.Colors.WHITE),
                 ),
-                ft.Row(
+                ft.Column(
                     [
-                        ft.Container(total_lapsos_dd, expand=1),
-                        ft.Container(current_lapso_dd, expand=1),
+                        total_lapsos_dd,
+                        current_lapso_dd,
                     ],
-                    spacing=10,
+                    spacing=12,
                 ),
                 ft.Container(height=4),
                 ft.FilledButton(
