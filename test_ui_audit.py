@@ -136,5 +136,48 @@ class ComprehensiveFrontendAudit(unittest.TestCase):
             self.assertIsNotNone(view)
         print("[OK] DashboardScreen and all internal tabs mounted successfully.")
 
+    def test_08_view_pop_back_button_safeguard(self):
+        print("Testing Android Back Button / view_pop safety...")
+        import importlib.util
+        frontend_main_path = os.path.join(frontend_dir, "app", "main.py")
+        spec = importlib.util.spec_from_file_location("frontend_main", frontend_main_path)
+        frontend_main_mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(frontend_main_mod)
+        main = frontend_main_mod.main
+
+        # Simular inicialización de main
+        mock_p = MagicMock(spec=ft.Page)
+        mock_p.views = []
+        mock_p.route = "/login"
+        main(mock_p)
+
+        self.assertIsNotNone(mock_p.on_view_pop)
+
+        # Caso 1: views con 1 solo elemento (el caso que causó el error)
+        mock_p.views = [MagicMock(route="/login")]
+        try:
+            mock_p.on_view_pop(MagicMock())
+            print("[OK] view_pop with 1 view handled safely without IndexError.")
+        except IndexError:
+            self.fail("on_view_pop raised IndexError when views had 1 element!")
+
+        # Caso 2: views vacío
+        mock_p.views = []
+        try:
+            mock_p.on_view_pop(MagicMock())
+            print("[OK] view_pop with 0 views handled safely without IndexError.")
+        except IndexError:
+            self.fail("on_view_pop raised IndexError when views was empty!")
+
+        # Caso 3: views con 2 elementos
+        v1 = MagicMock(route="/dashboard")
+        v2 = MagicMock(route="/profile")
+        mock_p.views = [v1, v2]
+        mock_p.on_view_pop(MagicMock())
+        self.assertEqual(len(mock_p.views), 1)
+        mock_p.navigate.assert_called_with("/dashboard")
+        print("[OK] view_pop with 2 views popped and navigated safely.")
+
 if __name__ == "__main__":
     unittest.main()
+

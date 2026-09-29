@@ -95,9 +95,23 @@ def main(page: ft.Page):
         page.update()
 
     def view_pop(view):
-        page.views.pop()
-        top_view = page.views[-1]
-        page.navigate(top_view.route)
+        try:
+            if len(page.views) > 1:
+                page.views.pop()
+                if len(page.views) > 0:
+                    top_view = page.views[-1]
+                    page.navigate(top_view.route)
+            else:
+                current = page.route.strip("/") if page.route else ""
+                if current in ["calculator", "subjects", "profile", "horario", "notas", "settings"]:
+                    if hasattr(state, "switch_tab") and callable(state.switch_tab):
+                        state.switch_tab("dashboard")
+                    else:
+                        page.navigate("/dashboard")
+                elif current == "register":
+                    page.navigate("/login")
+        except Exception:
+            pass
 
     page.on_route_change = route_change
     page.on_view_pop = view_pop
