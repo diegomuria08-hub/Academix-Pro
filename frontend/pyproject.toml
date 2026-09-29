@@ -11,5 +11,5 @@ dependencies = [
 [tool.flet]
 org = "com.academix"
 product = "Académix Pro"
-company = "Académix Pro"
-copyright = "Copyright (C) 2026 Académix Pro"
+company = "Diego Muria - IUPSM"
+copyright = "Derechos reservados para Diego Muria estudiante de ingenieria de sistemas del IUPSM"
