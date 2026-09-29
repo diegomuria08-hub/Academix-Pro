@@ -45,5 +45,7 @@ class AcademicSettings(Base):
     passing_grade = Column(Float, default=10.0)
     evaluation_mode = Column(String(30), default="university") # "university" (ponderado) o "liceo" (equitativo/simple)
     default_eval_count = Column(Integer, default=5)
+    total_lapsos = Column(Integer, default=3, nullable=False)
+    current_lapso = Column(Integer, default=1, nullable=False)
     
     user = relationship("User", back_populates="settings")

@@ -3,6 +3,7 @@ from datetime import datetime, timedelta
 from app.core.api_client import api
 from app.core.state import state
 from app.theme.colors import AcademixColors
+from app.theme.copyright import build_copyright_footer
 
 DAYS_OF_WEEK = [
     (0, "Lunes", "LUN"),
@@ -825,6 +826,9 @@ def ScheduleScreen(page: ft.Page):
                 ft.Container(height=10),
                 loading_bar,
                 content_container,
+                ft.Container(height=20),
+                build_copyright_footer(page),
+                ft.Container(height=20),
             ],
             spacing=0,
         )

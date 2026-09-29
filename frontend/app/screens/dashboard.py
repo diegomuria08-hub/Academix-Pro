@@ -5,6 +5,8 @@ from app.theme.colors import AcademixColors
 from app.screens.subjects import SubjectsScreen
 from app.screens.profile import ProfileScreen
 from app.screens.schedule import ScheduleScreen
+from app.theme.copyright import build_copyright_footer, build_author_sidebar_card
+
 
 
 # ────────────────────────────────────────────────────────────────
@@ -93,26 +95,52 @@ def _stat_glass_card(title: str, value: str, icon, accent: str, progress: float 
 # ────────────────────────────────────────────────────────────────
 _cached_stats_data = None
 
+def _is_liceo_user():
+    if not state.current_user:
+        return False
+    st = state.current_user.get("profile", {}).get("student_type")
+    em = state.current_user.get("settings", {}).get("evaluation_mode")
+    return st in ["high_school", "StudentType.high_school"] or em == "liceo"
+
 def _build_stats_rows(stats_data):
+    is_liceo = _is_liceo_user() or (stats_data and stats_data.get("student_type") == "high_school")
     if stats_data:
         gpa = stats_data.get("gpa")
+        annual_gpa = stats_data.get("annual_gpa")
         max_scale = stats_data.get("max_scale", 20.0)
         active_count = stats_data.get("active_subjects_count", 0)
         passed_count = stats_data.get("passed_count", 0)
         failed_count = stats_data.get("failed_count", 0)
+        curr_lapso = stats_data.get("current_lapso", 1)
 
-        if gpa is not None:
-            gpa_text = f"{gpa:.2f}/{int(max_scale)}"
-            gpa_prog = min(1.0, gpa / max_scale) if max_scale > 0 else 0.0
-            gpa_sub = "Promedio acumulado"
+        if is_liceo:
+            gpa_title = "Promedio Anual Definitivo"
+            if annual_gpa is not None:
+                gpa_text = f"{annual_gpa:.2f}/{int(max_scale)}"
+                gpa_prog = min(1.0, annual_gpa / max_scale) if max_scale > 0 else 0.0
+                gpa_sub = "Promedio de Lapsos"
+            elif gpa is not None:
+                gpa_text = f"{gpa:.2f}/{int(max_scale)}"
+                gpa_prog = min(1.0, gpa / max_scale) if max_scale > 0 else 0.0
+                gpa_sub = f"Lapso actual {curr_lapso}"
+            else:
+                gpa_text = f"--/{int(max_scale)}"
+                gpa_prog = 0.0
+                gpa_sub = "Sin notas aún"
         else:
-            gpa_text = f"--/{int(max_scale)}"
-            gpa_prog = 0.0
-            gpa_sub = "Sin notas aún"
+            gpa_title = "Promedio General"
+            if gpa is not None:
+                gpa_text = f"{gpa:.2f}/{int(max_scale)}"
+                gpa_prog = min(1.0, gpa / max_scale) if max_scale > 0 else 0.0
+                gpa_sub = "Promedio acumulado"
+            else:
+                gpa_text = f"--/{int(max_scale)}"
+                gpa_prog = 0.0
+                gpa_sub = "Sin notas aún"
 
         active_text = str(active_count)
         active_prog = min(1.0, active_count / 8.0)
-        active_sub = "Materias inscritas"
+        active_sub = "Materias del año" if is_liceo else "Materias inscritas"
 
         passed_text = str(passed_count)
         passed_prog = (passed_count / active_count) if active_count > 0 else 0.0
@@ -122,6 +150,7 @@ def _build_stats_rows(stats_data):
         failed_prog = (failed_count / active_count) if active_count > 0 else 0.0
         failed_sub = f"< {stats_data.get('passing_grade', 10.0):.0f} pts"
     else:
+        gpa_title = "Promedio Anual" if is_liceo else "Promedio General"
         gpa_text = "--/20"
         gpa_prog = 0.0
         gpa_sub = "Sin notas aún"
@@ -139,7 +168,7 @@ def _build_stats_rows(stats_data):
     row_top = ft.Row(
         [
             _stat_glass_card(
-                "Promedio General",
+                gpa_title,
                 gpa_text,
                 ft.Icons.SHOW_CHART,
                 AcademixColors.CYAN_NEON,
@@ -354,6 +383,9 @@ def _section_home(page: ft.Page, user_name: str):
         advice_card,
         ft.Container(height=10),
         quick_calc_card,
+        ft.Container(height=16),
+        build_copyright_footer(page, is_compact=True),
+        ft.Container(height=16),
     ]
 
     return ft.Column(
@@ -1094,6 +1126,8 @@ def DashboardScreen(page: ft.Page, active_route: str = "dashboard"):
                 sidebar_nav_col,
                 ft.Container(expand=True),
                 user_profile_card,
+                ft.Container(height=8),
+                build_author_sidebar_card(page),
                 ft.Container(height=6),
             ],
             spacing=0,

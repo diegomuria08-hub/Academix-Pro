@@ -1,6 +1,7 @@
 import flet as ft
 from app.core.api_client import api
 from app.theme.colors import AcademixColors
+from app.theme.copyright import build_copyright_footer
 
 
 def _glass_input(label: str, hint: str = "", password: bool = False, reveal: bool = False, prefix_icon=None):
@@ -170,7 +171,21 @@ def RegisterScreen(page: ft.Page):
                     colors=[AcademixColors.BG_START, AcademixColors.BG_END],
                 ),
             ),
-            ft.Container(content=card, alignment=ft.Alignment.CENTER, expand=True),
+            ft.Container(
+                content=ft.Column(
+                    [
+                        card,
+                        ft.Container(height=8),
+                        build_copyright_footer(page),
+                    ],
+                    horizontal_alignment=ft.CrossAxisAlignment.CENTER,
+                    alignment=ft.MainAxisAlignment.CENTER,
+                    scroll=ft.ScrollMode.AUTO,
+                ),
+                alignment=ft.Alignment.CENTER,
+                expand=True,
+                padding=ft.Padding(0, 16, 0, 16),
+            ),
         ],
         expand=True,
     )

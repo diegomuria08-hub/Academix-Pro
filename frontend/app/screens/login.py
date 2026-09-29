@@ -2,6 +2,7 @@ import flet as ft
 from app.core.api_client import api
 from app.core.state import state
 from app.theme.colors import AcademixColors
+from app.theme.copyright import open_author_rights_dialog, build_copyright_footer
 
 
 def LoginScreen(page: ft.Page):
@@ -319,6 +320,47 @@ def LoginScreen(page: ft.Page):
                     alignment=ft.MainAxisAlignment.CENTER,
                     spacing=2,
                 ),
+                ft.Divider(color=ft.Colors.with_opacity(0.12, ft.Colors.WHITE), height=14),
+                # Firma de Desarrollador Oficial - Diego Muria
+                ft.Container(
+                    content=ft.Column(
+                        [
+                            ft.Row(
+                                [
+                                    ft.Icon(ft.Icons.VERIFIED_USER_ROUNDED, color=AcademixColors.CYAN_NEON, size=13),
+                                    ft.Text(
+                                        "Desarrollador Oficial: Diego Muria",
+                                        size=10.5,
+                                        weight=ft.FontWeight.BOLD,
+                                        color=ft.Colors.WHITE,
+                                    ),
+                                ],
+                                alignment=ft.MainAxisAlignment.CENTER,
+                                spacing=4,
+                            ),
+                            ft.Text(
+                                "Estudiante de Ingeniería de Sistemas — IUPSM",
+                                size=9.5,
+                                color=AcademixColors.CYAN_NEON,
+                                text_align=ft.TextAlign.CENTER,
+                            ),
+                            ft.Text(
+                                "Derechos Reservados • Propiedad Intelectual Protegida © 2026",
+                                size=8.5,
+                                color=ft.Colors.with_opacity(0.6, ft.Colors.WHITE),
+                                text_align=ft.TextAlign.CENTER,
+                            ),
+                        ],
+                        spacing=2,
+                        horizontal_alignment=ft.CrossAxisAlignment.CENTER,
+                    ),
+                    padding=ft.Padding(8, 6, 8, 6),
+                    border_radius=10,
+                    bgcolor=ft.Colors.with_opacity(0.15, "#060D17"),
+                    border=ft.Border.all(1, ft.Colors.with_opacity(0.25, AcademixColors.CYAN_NEON)),
+                    on_click=lambda _: open_author_rights_dialog(page),
+                    tooltip="Certificado de Autoría y Licencia de Diego Muria",
+                ),
             ],
             spacing=10,
             horizontal_alignment=ft.CrossAxisAlignment.CENTER,
@@ -386,14 +428,18 @@ def LoginScreen(page: ft.Page):
                 content=ft.Column(
                     [
                         header_logo,
-                        ft.Container(height=18),
+                        ft.Container(height=14),
                         glass_card,
+                        ft.Container(height=8),
+                        build_copyright_footer(page),
                     ],
                     horizontal_alignment=ft.CrossAxisAlignment.CENTER,
                     alignment=ft.MainAxisAlignment.CENTER,
+                    scroll=ft.ScrollMode.AUTO,
                 ),
                 alignment=ft.Alignment.CENTER,
                 expand=True,
+                padding=ft.Padding(0, 16, 0, 16),
             ),
         ],
         expand=True,

@@ -59,25 +59,28 @@ def calculate_subject_metrics(
     default_max: float = 20.0,
     evaluation_mode: str = "university",
     default_eval_count: int = 5,
+    student_type: str = "university",
+    total_lapsos: int = 3,
+    current_lapso: int = 1,
 ):
     """
     Motor de Cálculo Académico Adaptativo:
     - Escala 0 a 20 institucional (o configurada).
-    - Cálculo de Puntos Reales Ganados (Aporte a la Definitiva = Nota * Peso%).
-    - Proyección matemática: Puntos faltantes para aprobar, nota máxima posible
-      y promedio requerido en el porcentaje restante.
+    - Modalidad Universidad: Cálculo semestral ponderado sobre el 100% de la materia.
+    - Modalidad Liceo/Secundaria: Evaluación por Lapsos Escolares (ej: 3 lapsos en Venezuela).
+      Cada lapso se evalúa al 100% y la nota definitiva de la materia es el promedio de los lapsos.
     """
     passing_score = subject.passing_grade_override if subject.passing_grade_override is not None else default_passing
     max_score = subject.max_grade_override if subject.max_grade_override is not None else default_max
 
-    accumulated_points = 0.0
-    evaluated_weight = 0.0
+    is_liceo = (student_type in ["high_school", "StudentType.high_school"] or evaluation_mode == "liceo")
 
     eval_responses = []
     for ev in subject.evaluations:
         grade_resp = None
         points_earned = None
         status = ev.status or "pendiente"
+        ev_lapso = getattr(ev, "lapso_number", 1) or 1
 
         if ev.grade is not None and ev.grade.score is not None:
             grade_resp = GradeResponse(
@@ -87,10 +90,8 @@ def calculate_subject_metrics(
                 notes=ev.grade.notes,
             )
             status = "calificada"
-            # Cálculo de Puntos Reales Ganados hacia los 20 finales
+            # Cálculo de Puntos Reales Ganados (Nota * Peso%)
             points_earned = round(ev.grade.score * (ev.weight_percent / 100.0), 2)
-            accumulated_points += points_earned
-            evaluated_weight += ev.weight_percent
 
         eval_responses.append(
             EvaluationResponse(
@@ -104,12 +105,75 @@ def calculate_subject_metrics(
                 status=status,
                 max_grade=ev.max_grade or 20.0,
                 points_earned=points_earned,
+                lapso_number=ev_lapso,
                 grade=grade_resp,
             )
         )
 
-    accumulated_points = round(accumulated_points, 2)
-    evaluated_weight = round(evaluated_weight, 1)
+    lapsos_summary = []
+    annual_definitiva = None
+
+    if is_liceo:
+        # ─── LÓGICA DE LICEO / SECUNDARIA POR LAPSOS ───
+        lapsos_grades_completed = []
+        tot_lapsos = total_lapsos or 3
+
+        for l_num in range(1, tot_lapsos + 1):
+            l_evals = [ev for ev in eval_responses if ev.lapso_number == l_num]
+            l_accum_pts = 0.0
+            l_eval_weight = 0.0
+            graded_count = 0
+
+            for ev in l_evals:
+                if ev.points_earned is not None:
+                    l_accum_pts += ev.points_earned
+                    l_eval_weight += ev.weight_percent
+                    graded_count += 1
+
+            l_accum_pts = round(l_accum_pts, 2)
+            l_eval_weight = round(l_eval_weight, 1)
+
+            if graded_count > 0:
+                lapso_grade = l_accum_pts
+                lapsos_grades_completed.append(lapso_grade)
+            else:
+                lapso_grade = None
+
+            lapsos_summary.append({
+                "lapso": l_num,
+                "grade": lapso_grade,
+                "accumulated_points": l_accum_pts,
+                "evaluated_percent": l_eval_weight,
+                "is_completed": l_eval_weight >= 100.0,
+                "eval_count": len(l_evals),
+            })
+
+        # Definitiva Anual: Promedio de los lapsos con notas registradas
+        if lapsos_grades_completed:
+            annual_definitiva = round(sum(lapsos_grades_completed) / len(lapsos_grades_completed), 2)
+        else:
+            annual_definitiva = None
+
+        # Datos del Lapso Activo para los indicadores visuales
+        active_lapso_data = next((item for item in lapsos_summary if item["lapso"] == current_lapso), None)
+        if active_lapso_data:
+            accumulated_points = active_lapso_data["accumulated_points"]
+            evaluated_weight = active_lapso_data["evaluated_percent"]
+        else:
+            accumulated_points = 0.0
+            evaluated_weight = 0.0
+
+    else:
+        # ─── LÓGICA UNIVERSITARIA ESTÁNDAR (Ponderado Semestral) ───
+        accumulated_points = 0.0
+        evaluated_weight = 0.0
+        for ev in eval_responses:
+            if ev.points_earned is not None:
+                accumulated_points += ev.points_earned
+                evaluated_weight += ev.weight_percent
+
+        accumulated_points = round(accumulated_points, 2)
+        evaluated_weight = round(evaluated_weight, 1)
 
     # Rendimiento porcentual normalizado sobre lo evaluado
     if evaluated_weight > 0:
@@ -117,7 +181,7 @@ def calculate_subject_metrics(
     else:
         current_avg = None
 
-    # Estado de Aprobación y Proyección
+    # Estado de Aprobación y Proyección (por lapso en liceo o por semestre en uni)
     is_passed = accumulated_points >= passing_score
     points_needed = round(max(0.0, passing_score - accumulated_points), 2) if not is_passed else 0.0
 
@@ -131,7 +195,7 @@ def calculate_subject_metrics(
         req = points_needed / (remaining_weight / 100.0)
         required_avg_remaining = round(req, 2)
     else:
-        required_avg_remaining = None  # Imposible si ya se evaluó 100% y no llegó a passing_score
+        required_avg_remaining = None
 
     return SubjectResponse(
         id=subject.id,
@@ -154,6 +218,9 @@ def calculate_subject_metrics(
         max_possible_grade=max_possible,
         required_average_remaining=required_avg_remaining,
         max_evaluations=getattr(subject, "max_evaluations", None),
+        lapso_number=current_lapso if is_liceo else None,
+        lapsos_summary=lapsos_summary if is_liceo else None,
+        annual_definitiva=annual_definitiva if is_liceo else None,
         evaluations=eval_responses,
     ), accumulated_points, current_avg, passing_score, is_passed
 
@@ -173,11 +240,17 @@ def get_user_subjects(db: Session, user: User) -> list[SubjectResponse]:
     default_max = settings.max_grade or 20.0
     eval_mode = getattr(settings, "evaluation_mode", "university")
     default_evals = getattr(settings, "default_eval_count", 5)
+    total_lapsos = getattr(settings, "total_lapsos", 3) or 3
+    current_lapso = getattr(settings, "current_lapso", 1) or 1
+
+    st_val = user.profile.student_type if user.profile else "university"
+    student_type = st_val.value if hasattr(st_val, "value") else str(st_val)
 
     result = []
     for s in subjects:
         resp, _, _, _, _ = calculate_subject_metrics(
-            s, default_passing, default_max, eval_mode, default_evals
+            s, default_passing, default_max, eval_mode, default_evals,
+            student_type=student_type, total_lapsos=total_lapsos, current_lapso=current_lapso
         )
         result.append(resp)
     return result
@@ -205,9 +278,20 @@ def create_subject(db: Session, user: User, subject_in: SubjectCreate) -> Subjec
     db.commit()
     db.refresh(db_subject)
 
-    default_passing = user.settings.passing_grade if user.settings else 10.0
-    default_max = user.settings.max_grade if user.settings else 20.0
-    resp, _, _, _, _ = calculate_subject_metrics(db_subject, default_passing, default_max)
+    settings = user.settings or AcademicSettings(max_grade=20.0, passing_grade=10.0)
+    default_passing = settings.passing_grade or 10.0
+    default_max = settings.max_grade or 20.0
+    eval_mode = getattr(settings, "evaluation_mode", "university")
+    default_evals = getattr(settings, "default_eval_count", 5)
+    total_lapsos = getattr(settings, "total_lapsos", 3) or 3
+    current_lapso = getattr(settings, "current_lapso", 1) or 1
+    st_val = user.profile.student_type if user.profile else "university"
+    student_type = st_val.value if hasattr(st_val, "value") else str(st_val)
+
+    resp, _, _, _, _ = calculate_subject_metrics(
+        db_subject, default_passing, default_max, eval_mode, default_evals,
+        student_type=student_type, total_lapsos=total_lapsos, current_lapso=current_lapso
+    )
     return resp
 
 
@@ -229,9 +313,20 @@ def update_subject(db: Session, user: User, subject_id: str, subject_in: Subject
     db.commit()
     db.refresh(subject)
 
-    default_passing = user.settings.passing_grade if user.settings else 10.0
-    default_max = user.settings.max_grade if user.settings else 20.0
-    resp, _, _, _, _ = calculate_subject_metrics(subject, default_passing, default_max)
+    settings = user.settings or AcademicSettings(max_grade=20.0, passing_grade=10.0)
+    default_passing = settings.passing_grade or 10.0
+    default_max = settings.max_grade or 20.0
+    eval_mode = getattr(settings, "evaluation_mode", "university")
+    default_evals = getattr(settings, "default_eval_count", 5)
+    total_lapsos = getattr(settings, "total_lapsos", 3) or 3
+    current_lapso = getattr(settings, "current_lapso", 1) or 1
+    st_val = user.profile.student_type if user.profile else "university"
+    student_type = st_val.value if hasattr(st_val, "value") else str(st_val)
+
+    resp, _, _, _, _ = calculate_subject_metrics(
+        subject, default_passing, default_max, eval_mode, default_evals,
+        student_type=student_type, total_lapsos=total_lapsos, current_lapso=current_lapso
+    )
     return resp
 
 
@@ -249,8 +344,8 @@ def delete_subject(db: Session, user: User, subject_id: str):
     return {"status": "success", "message": "Materia eliminada exitosamente"}
 
 
-def get_subject_evaluations(db: Session, user: User, subject_id: str) -> list[EvaluationResponse]:
-    """Lista todas las evaluaciones registradas de una materia."""
+def get_subject_evaluations(db: Session, user: User, subject_id: str, lapso: int = None) -> list[EvaluationResponse]:
+    """Lista todas las evaluaciones registradas de una materia, opcionalmente filtradas por lapso."""
     subject = (
         db.query(Subject)
         .join(AcademicPeriod)
@@ -260,13 +355,15 @@ def get_subject_evaluations(db: Session, user: User, subject_id: str) -> list[Ev
     if not subject:
         raise HTTPException(status_code=404, detail="Materia no encontrada")
 
-    evaluations = (
+    query = (
         db.query(Evaluation)
         .options(joinedload(Evaluation.grade))
         .filter(Evaluation.subject_id == subject_id)
-        .order_by(Evaluation.date.asc(), Evaluation.name.asc())
-        .all()
     )
+    if lapso is not None:
+        query = query.filter(Evaluation.lapso_number == lapso)
+
+    evaluations = query.order_by(Evaluation.date.asc(), Evaluation.name.asc()).all()
 
     results = []
     for ev in evaluations:
@@ -293,6 +390,7 @@ def get_subject_evaluations(db: Session, user: User, subject_id: str) -> list[Ev
                 status=ev.status or "pendiente",
                 max_grade=ev.max_grade or 20.0,
                 points_earned=points_earned,
+                lapso_number=getattr(ev, "lapso_number", 1) or 1,
                 grade=grade_resp,
             )
         )
@@ -309,30 +407,55 @@ def create_evaluation(db: Session, user: User, subject_id: str, eval_in: Evaluat
     if not subject:
         raise HTTPException(status_code=404, detail="Materia no encontrada")
 
-    # Validación de límite de evaluaciones planificadas por materia/periodo
+    st_val = user.profile.student_type if user.profile else "university"
+    student_type_str = st_val.value if hasattr(st_val, "value") else str(st_val)
+    eval_mode = getattr(user.settings, "evaluation_mode", "university") if user.settings else "university"
+    is_liceo = (student_type_str in ["high_school", "StudentType.high_school"] or eval_mode == "liceo")
+
+    target_lapso = eval_in.lapso_number or getattr(user.settings, "current_lapso", 1) or 1
+
+    # Validación de límite de evaluaciones planificadas por materia/periodo (o por lapso en liceo)
     max_evals = getattr(subject, "max_evaluations", None)
     if not max_evals and user.settings and getattr(user.settings, "default_eval_count", None):
         max_evals = user.settings.default_eval_count
     if not max_evals:
-        max_evals = 5
+        max_evals = 4 if is_liceo else 5
 
-    current_evals_count = db.query(Evaluation).filter(Evaluation.subject_id == subject_id).count()
+    if is_liceo:
+        current_evals_count = (
+            db.query(Evaluation)
+            .filter(Evaluation.subject_id == subject_id, Evaluation.lapso_number == target_lapso)
+            .count()
+        )
+    else:
+        current_evals_count = db.query(Evaluation).filter(Evaluation.subject_id == subject_id).count()
+
     if current_evals_count >= max_evals:
+        scope_msg = f"para el Lapso {target_lapso}" if is_liceo else "para este periodo"
         raise HTTPException(
             status_code=400,
-            detail=f"Has alcanzado el límite máximo de evaluaciones configuradas para este periodo ({max_evals} evaluaciones)."
+            detail=f"Has alcanzado el límite máximo de evaluaciones configuradas {scope_msg} ({max_evals} evaluaciones)."
         )
 
-    # Validar sumatoria de porcentaje acumulado (máximo 100%)
-    existing_weights_sum = (
-        db.query(func.coalesce(func.sum(Evaluation.weight_percent), 0.0))
-        .filter(Evaluation.subject_id == subject_id)
-        .scalar()
-    )
+    # Validar sumatoria de porcentaje acumulado (máximo 100% en ese lapso si es liceo, o total si es uni)
+    if is_liceo:
+        existing_weights_sum = (
+            db.query(func.coalesce(func.sum(Evaluation.weight_percent), 0.0))
+            .filter(Evaluation.subject_id == subject_id, Evaluation.lapso_number == target_lapso)
+            .scalar()
+        )
+    else:
+        existing_weights_sum = (
+            db.query(func.coalesce(func.sum(Evaluation.weight_percent), 0.0))
+            .filter(Evaluation.subject_id == subject_id)
+            .scalar()
+        )
+
     if (existing_weights_sum + eval_in.weight_percent) > 100.0:
+        scope_msg = f"en el Lapso {target_lapso}" if is_liceo else ""
         raise HTTPException(
             status_code=400,
-            detail=f"La ponderación acumulada ({existing_weights_sum + eval_in.weight_percent:.1f}%) excedería el 100% permitido."
+            detail=f"La ponderación acumulada ({existing_weights_sum + eval_in.weight_percent:.1f}%) {scope_msg} excedería el 100% permitido."
         )
 
     status = "calificada" if eval_in.score is not None else "pendiente"
@@ -347,6 +470,7 @@ def create_evaluation(db: Session, user: User, subject_id: str, eval_in: Evaluat
         date=eval_in.date,
         status=status,
         max_grade=20.0,
+        lapso_number=target_lapso,
     )
     db.add(db_eval)
     db.flush()
@@ -382,6 +506,7 @@ def create_evaluation(db: Session, user: User, subject_id: str, eval_in: Evaluat
         status=status,
         max_grade=db_eval.max_grade or 20.0,
         points_earned=points_earned,
+        lapso_number=db_eval.lapso_number,
         grade=grade_resp,
     )
 
@@ -397,16 +522,28 @@ def update_evaluation(db: Session, user: User, eval_id: str, eval_in: Evaluation
     if not evaluation:
         raise HTTPException(status_code=404, detail="Evaluación no encontrada")
 
-    if eval_in.weight_percent is not None and eval_in.weight_percent != evaluation.weight_percent:
+    st_val = user.profile.student_type if user.profile else "university"
+    student_type_str = st_val.value if hasattr(st_val, "value") else str(st_val)
+    eval_mode = getattr(user.settings, "evaluation_mode", "university") if user.settings else "university"
+    is_liceo = (student_type_str in ["high_school", "StudentType.high_school"] or eval_mode == "liceo")
+
+    target_lapso = eval_in.lapso_number if eval_in.lapso_number is not None else (getattr(evaluation, "lapso_number", 1) or 1)
+
+    if eval_in.weight_percent is not None and (eval_in.weight_percent != evaluation.weight_percent or target_lapso != evaluation.lapso_number):
+        filters = [Evaluation.subject_id == evaluation.subject_id, Evaluation.id != eval_id]
+        if is_liceo:
+            filters.append(Evaluation.lapso_number == target_lapso)
+
         other_weights_sum = (
             db.query(func.coalesce(func.sum(Evaluation.weight_percent), 0.0))
-            .filter(Evaluation.subject_id == evaluation.subject_id, Evaluation.id != eval_id)
+            .filter(*filters)
             .scalar()
         )
         if (other_weights_sum + eval_in.weight_percent) > 100.0:
+            scope_msg = f"en el Lapso {target_lapso}" if is_liceo else ""
             raise HTTPException(
                 status_code=400,
-                detail=f"La ponderación acumulada ({other_weights_sum + eval_in.weight_percent:.1f}%) excedería el 100% permitido."
+                detail=f"La ponderación acumulada ({other_weights_sum + eval_in.weight_percent:.1f}%) {scope_msg} excedería el 100% permitido."
             )
 
     if eval_in.name is not None:
@@ -419,6 +556,8 @@ def update_evaluation(db: Session, user: User, eval_id: str, eval_in: Evaluation
         evaluation.weight_percent = eval_in.weight_percent
     if eval_in.date is not None:
         evaluation.date = eval_in.date
+    if eval_in.lapso_number is not None:
+        evaluation.lapso_number = eval_in.lapso_number
 
     if eval_in.score is not None:
         evaluation.status = "calificada"
@@ -458,6 +597,7 @@ def update_evaluation(db: Session, user: User, eval_id: str, eval_in: Evaluation
         status=evaluation.status or "pendiente",
         max_grade=evaluation.max_grade or 20.0,
         points_earned=points_earned,
+        lapso_number=getattr(evaluation, "lapso_number", 1) or 1,
         grade=grade_resp,
     )
 
@@ -680,35 +820,52 @@ def get_academic_stats(db: Session, user: User) -> AcademicStatsResponse:
     passing_grade = settings.passing_grade or 10.0
     eval_mode = getattr(settings, "evaluation_mode", "university")
     default_evals = getattr(settings, "default_eval_count", 5)
+    total_lapsos = getattr(settings, "total_lapsos", 3) or 3
+    current_lapso = getattr(settings, "current_lapso", 1) or 1
+
+    st_val = user.profile.student_type if user.profile else "university"
+    student_type = st_val.value if hasattr(st_val, "value") else str(st_val)
+    is_liceo = (student_type in ["high_school", "StudentType.high_school"] or eval_mode == "liceo")
 
     subject_responses = []
-    grades_list = []
+    lapso_grades_list = []
+    annual_grades_list = []
     passed_count = 0
     failed_count = 0
     total_evals = 0
 
     for s in subjects:
         resp, accum_pts, curr_avg, pass_score, is_pass = calculate_subject_metrics(
-            s, passing_grade, max_scale, eval_mode, default_evals
+            s, passing_grade, max_scale, eval_mode, default_evals,
+            student_type=student_type, total_lapsos=total_lapsos, current_lapso=current_lapso
         )
         subject_responses.append(resp)
         total_evals += len(s.evaluations)
 
-        if curr_avg is not None:
-            # Para el GPA consideramos el rendimiento de la materia
-            grades_list.append(curr_avg)
-            if is_pass or (resp.accumulated_percent >= 100.0 and accum_pts >= pass_score):
-                passed_count += 1
-            elif resp.accumulated_percent >= 100.0 and accum_pts < pass_score:
-                failed_count += 1
-            elif resp.max_possible_grade < pass_score:
-                # Ya es matemáticamente imposible que apruebe
-                failed_count += 1
+        if is_liceo:
+            if resp.accumulated_points > 0 or resp.accumulated_percent > 0:
+                lapso_grades_list.append(resp.accumulated_points)
+            if resp.annual_definitiva is not None:
+                annual_grades_list.append(resp.annual_definitiva)
+                if resp.annual_definitiva >= passing_grade:
+                    passed_count += 1
+                else:
+                    failed_count += 1
+            else:
+                if is_pass:
+                    passed_count += 1
+        else:
+            if curr_avg is not None:
+                lapso_grades_list.append(curr_avg)
+                if is_pass or (resp.accumulated_percent >= 100.0 and accum_pts >= pass_score):
+                    passed_count += 1
+                elif resp.accumulated_percent >= 100.0 and accum_pts < pass_score:
+                    failed_count += 1
+                elif resp.max_possible_grade < pass_score:
+                    failed_count += 1
 
-    if grades_list:
-        real_gpa = round(sum(grades_list) / len(grades_list), 2)
-    else:
-        real_gpa = None
+    real_gpa = round(sum(lapso_grades_list) / len(lapso_grades_list), 2) if lapso_grades_list else None
+    annual_gpa = round(sum(annual_grades_list) / len(annual_grades_list), 2) if annual_grades_list else None
 
     return AcademicStatsResponse(
         gpa=real_gpa,
@@ -718,6 +875,10 @@ def get_academic_stats(db: Session, user: User) -> AcademicStatsResponse:
         passed_count=passed_count,
         failed_count=failed_count,
         total_evaluations_count=total_evals,
+        student_type="high_school" if is_liceo else "university",
+        total_lapsos=total_lapsos if is_liceo else 1,
+        current_lapso=current_lapso if is_liceo else 1,
+        annual_gpa=annual_gpa if is_liceo else None,
         subjects=subject_responses,
     )
 

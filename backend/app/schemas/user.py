@@ -44,6 +44,8 @@ class AcademicSettingsResponse(BaseModel):
     passing_grade: float
     evaluation_mode: str = "university"
     default_eval_count: int = 5
+    total_lapsos: int = 3
+    current_lapso: int = 1
 
     class Config:
         from_attributes = True
@@ -54,6 +56,8 @@ class AcademicSettingsUpdate(BaseModel):
     passing_grade: Optional[float] = None
     evaluation_mode: Optional[str] = None
     default_eval_count: Optional[int] = None
+    total_lapsos: Optional[int] = None
+    current_lapso: Optional[int] = None
 
 class UserResponse(BaseModel):
     id: str

@@ -45,6 +45,7 @@ class EvaluationCreate(BaseModel):
     weight_percent: float = Field(..., gt=0, le=100)
     date: Optional[date] = None
     score: Optional[float] = None  # Nota opcional al crear
+    lapso_number: Optional[int] = 1
 
 class EvaluationUpdate(BaseModel):
     name: Optional[str] = None
@@ -54,6 +55,7 @@ class EvaluationUpdate(BaseModel):
     date: Optional[date] = None
     score: Optional[float] = None
     status: Optional[str] = None
+    lapso_number: Optional[int] = None
 
 class EvaluationResponse(BaseModel):
     id: str
@@ -66,6 +68,7 @@ class EvaluationResponse(BaseModel):
     status: str = "pendiente"
     max_grade: float = 20.0
     points_earned: Optional[float] = None  # Aporte real a la definitiva: score * (weight / 100)
+    lapso_number: int = 1
     grade: Optional[GradeResponse] = None
 
     class Config:
@@ -117,6 +120,10 @@ class SubjectResponse(BaseModel):
     is_passed: bool = False                  # True si ya alcanzó la nota aprobatoria
     max_possible_grade: float = 20.0         # Nota máxima alcanzable si saca 20 en lo restante
     required_average_remaining: Optional[float] = None # Nota promedio requerida en lo que falta
+    # Campos específicos para Liceo / Secundaria (Lapsos Escolares):
+    lapso_number: Optional[int] = None
+    lapsos_summary: Optional[List[dict]] = None  # Resumen por lapso: [{lapso, grade, evaluated_percent, is_passed}]
+    annual_definitiva: Optional[float] = None    # Promedio acumulado de todos los lapsos
     evaluations: List[EvaluationResponse] = []
 
     class Config:
@@ -196,6 +203,10 @@ class AcademicStatsResponse(BaseModel):
     passed_count: int = 0
     failed_count: int = 0
     total_evaluations_count: int = 0
+    student_type: Optional[str] = "university"
+    total_lapsos: Optional[int] = 3
+    current_lapso: Optional[int] = 1
+    annual_gpa: Optional[float] = None  # Promedio general anual en liceo
     subjects: List[SubjectResponse] = []
 
 

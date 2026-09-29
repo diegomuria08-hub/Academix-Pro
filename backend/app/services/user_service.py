@@ -32,11 +32,16 @@ def create_user(db: Session, user_in: UserCreate) -> User:
     db.add(db_profile)
     
     # Create default Academic Settings (0-20 scale, passing 10)
+    is_liceo = str(user_in.student_type) in ["high_school", "StudentType.high_school"]
     db_settings = AcademicSettings(
         user_id=db_user.id,
         min_grade=0.0,
         max_grade=20.0,
-        passing_grade=10.0
+        passing_grade=10.0,
+        evaluation_mode="liceo" if is_liceo else "university",
+        default_eval_count=4 if is_liceo else 5,
+        total_lapsos=3 if is_liceo else 1,
+        current_lapso=1,
     )
     db.add(db_settings)
     

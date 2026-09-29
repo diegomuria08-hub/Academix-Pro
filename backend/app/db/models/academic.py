@@ -55,6 +55,7 @@ class Evaluation(Base):
     date = Column(Date, nullable=True)
     status = Column(String(20), default="pendiente")
     max_grade = Column(Float, default=20.0)
+    lapso_number = Column(Integer, default=1, nullable=False)
     
     subject = relationship("Subject", back_populates="evaluations")
     grade = relationship("Grade", back_populates="evaluation", uselist=False, cascade="all, delete-orphan")

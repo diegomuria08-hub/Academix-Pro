@@ -2,6 +2,7 @@ import flet as ft
 from app.core.api_client import api
 from app.core.state import state
 from app.theme.colors import AcademixColors
+from app.theme.copyright import build_copyright_footer, open_author_rights_dialog
 
 
 def _glass_field(label: str, value: str = "", hint_text: str = "", keyboard_type=None, password: bool = False, can_reveal_password: bool = False):
@@ -90,18 +91,51 @@ def ProfileScreen(page: ft.Page, focus_settings: bool = False):
     first_name_field.on_change = on_avatar_changed
 
     # ─── Campos de Configuración Académica ──────────────────────
+    # ─── Campos de Configuración Académica ──────────────────────
     min_grade_field = _glass_field("Nota Mínima", value=str(settings_data.get("min_grade", 0.0)), keyboard_type=ft.KeyboardType.NUMBER)
     max_grade_field = _glass_field("Nota Máxima", value=str(settings_data.get("max_grade", 20.0)), keyboard_type=ft.KeyboardType.NUMBER)
     passing_grade_field = _glass_field("Nota para Aprobar", value=str(settings_data.get("passing_grade", 10.0)), keyboard_type=ft.KeyboardType.NUMBER)
-    default_evals_field = _glass_field("Evaluaciones por Periodo", value=str(settings_data.get("default_eval_count", 5)), keyboard_type=ft.KeyboardType.NUMBER, hint_text="Ej: 5")
+    default_evals_field = _glass_field("Evaluaciones por Lapso/Periodo", value=str(settings_data.get("default_eval_count", 4 if profile.get("student_type") == "high_school" else 5)), keyboard_type=ft.KeyboardType.NUMBER, hint_text="Ej: 4")
+
+    total_lapsos_dd = ft.Dropdown(
+        label="Cantidad de Lapsos / Periodos Anuales",
+        value=str(settings_data.get("total_lapsos", 3)),
+        options=[
+            ft.dropdown.Option("2", "2 Lapsos / Semestres"),
+            ft.dropdown.Option("3", "3 Lapsos (Estándar Liceo Venezuela 🇻🇪)"),
+            ft.dropdown.Option("4", "4 Periodos / Trimestres"),
+        ],
+        filled=True,
+        bgcolor="#0F1E36",
+        color=ft.Colors.WHITE,
+        border=ft.OutlineInputBorder(border_radius=12, side=ft.BorderSide(color=AcademixColors.CYAN_NEON, width=1.2)),
+        label_style=ft.TextStyle(color=AcademixColors.CYAN_NEON, size=12),
+    )
+
+    current_lapso_dd = ft.Dropdown(
+        label="Lapso Cursando Actualmente",
+        value=str(settings_data.get("current_lapso", 1)),
+        options=[
+            ft.dropdown.Option("1", "Primer Lapso (1)"),
+            ft.dropdown.Option("2", "Segundo Lapso (2)"),
+            ft.dropdown.Option("3", "Tercer Lapso (3)"),
+            ft.dropdown.Option("4", "Cuarto Lapso (4)"),
+        ],
+        filled=True,
+        bgcolor="#0F1E36",
+        color=ft.Colors.WHITE,
+        border=ft.OutlineInputBorder(border_radius=12, side=ft.BorderSide(color=AcademixColors.CYAN_NEON, width=1.2)),
+        label_style=ft.TextStyle(color=AcademixColors.CYAN_NEON, size=12),
+    )
 
     # ─── Handlers ───────────────────────────────────────────────
     def save_profile(e):
+        st_val = student_type_dd.value
         data = {
             "first_name": first_name_field.value.strip() if first_name_field.value else "",
             "last_name": last_name_field.value.strip() if last_name_field.value else "",
             "institution_name": institution_field.value.strip() if institution_field.value else "",
-            "student_type": student_type_dd.value,
+            "student_type": st_val,
             "avatar_url": avatar_url_field.value.strip() if avatar_url_field.value else None,
         }
         try:
@@ -109,7 +143,9 @@ def ProfileScreen(page: ft.Page, focus_settings: bool = False):
             if resp.status_code == 200:
                 updated_user = resp.json()
                 state.set_user(updated_user)
-                show_snack("✅ Perfil guardado correctamente en la base de datos")
+                # Actualizar también modo de evaluación según tipo
+                api.update_settings({"evaluation_mode": "liceo" if st_val == "high_school" else "university"})
+                show_snack("✅ Perfil y modo académico guardados en la base de datos")
             else:
                 show_snack(resp.json().get("detail", "Error al guardar perfil"), error=True)
         except Exception as ex:
@@ -121,7 +157,10 @@ def ProfileScreen(page: ft.Page, focus_settings: bool = False):
                 "min_grade": float(min_grade_field.value or 0),
                 "max_grade": float(max_grade_field.value or 20),
                 "passing_grade": float(passing_grade_field.value or 10),
-                "default_eval_count": int(default_evals_field.value or 5),
+                "default_eval_count": int(default_evals_field.value or 4),
+                "total_lapsos": int(total_lapsos_dd.value or 3),
+                "current_lapso": int(current_lapso_dd.value or 1),
+                "evaluation_mode": "liceo" if student_type_dd.value == "high_school" else "university",
             }
         except ValueError:
             show_snack("Las notas y cantidad de evaluaciones deben ser números válidos", error=True)
@@ -140,7 +179,7 @@ def ProfileScreen(page: ft.Page, focus_settings: bool = False):
             if resp.status_code == 200:
                 if state.current_user:
                     state.current_user["settings"] = resp.json()
-                show_snack("✅ Configuración de escala y evaluaciones actualizada")
+                show_snack("✅ Escala académica y configuración de lapsos guardada")
             else:
                 show_snack(resp.json().get("detail", "Error al guardar escala"), error=True)
         except Exception as ex:
@@ -223,9 +262,29 @@ def ProfileScreen(page: ft.Page, focus_settings: bool = False):
                     ],
                     spacing=10,
                 ),
+                ft.Divider(color=ft.Colors.with_opacity(0.12, ft.Colors.WHITE), height=14),
+                ft.Row(
+                    [
+                        ft.Icon(ft.Icons.SCHOOL, color=AcademixColors.YELLOW_NEON, size=18),
+                        ft.Text("Lapsos Escolares (Liceo / Bachillerato)", size=14, weight=ft.FontWeight.BOLD, color=ft.Colors.WHITE),
+                    ],
+                    spacing=8,
+                ),
+                ft.Text(
+                    "En Venezuela se cursan 3 lapsos por año escolar. Las materias se mantienen todo el año y al culminar los lapsos se calcula la definitiva final.",
+                    size=11.5,
+                    color=ft.Colors.with_opacity(0.65, ft.Colors.WHITE),
+                ),
+                ft.Row(
+                    [
+                        ft.Container(total_lapsos_dd, expand=1),
+                        ft.Container(current_lapso_dd, expand=1),
+                    ],
+                    spacing=10,
+                ),
                 ft.Container(height=4),
                 ft.FilledButton(
-                    "Guardar Escala Académica",
+                    "Guardar Escala Académica y Lapsos",
                     icon=ft.Icons.CHECK,
                     on_click=save_settings,
                     style=ft.ButtonStyle(
@@ -243,6 +302,61 @@ def ProfileScreen(page: ft.Page, focus_settings: bool = False):
         bgcolor=ft.Colors.with_opacity(0.22, "#0D1B2A"),
         border=ft.Border.all(1, ft.Colors.with_opacity(0.14, ft.Colors.WHITE)),
         shadow=ft.BoxShadow(blur_radius=20, color=ft.Colors.with_opacity(0.35, ft.Colors.BLACK), offset=ft.Offset(0, 8)),
+    )
+
+    # ─── Tarjeta de Derechos de Autor & Desarrollador Oficial ───
+    author_card = ft.Container(
+        content=ft.Column(
+            [
+                ft.Row(
+                    [
+                        ft.Icon(icon=ft.Icons.VERIFIED_USER_ROUNDED, color=AcademixColors.CYAN_NEON, size=22),
+                        ft.Text("Derechos de Autor y Desarrollador Oficial", size=16, weight=ft.FontWeight.BOLD, color=ft.Colors.WHITE),
+                    ],
+                    spacing=10,
+                ),
+                ft.Divider(color=ft.Colors.with_opacity(0.12, ft.Colors.WHITE), height=14),
+                ft.Row(
+                    [
+                        ft.CircleAvatar(
+                            content=ft.Text("DM", weight=ft.FontWeight.BOLD, color=ft.Colors.BLACK, size=14),
+                            bgcolor=AcademixColors.CYAN_NEON,
+                            radius=20,
+                        ),
+                        ft.Column(
+                            [
+                                ft.Text("Diego Muria", size=15, weight=ft.FontWeight.BOLD, color=ft.Colors.WHITE),
+                                ft.Text("Estudiante de Ingeniería de Sistemas", size=12, color=AcademixColors.CYAN_NEON),
+                                ft.Text("Instituto Universitario Politécnico Santiago Mariño (IUPSM)", size=11, color=ft.Colors.with_opacity(0.75, ft.Colors.WHITE)),
+                            ],
+                            spacing=2,
+                            expand=True,
+                        ),
+                    ],
+                    spacing=12,
+                ),
+                ft.Text(
+                    "Todos los derechos reservados. Esta solución tecnológica y su lógica adaptativa de notas fueron creadas y firmadas por Diego Muria. Sistema anti-copia activo.",
+                    size=11,
+                    color=ft.Colors.with_opacity(0.7, ft.Colors.WHITE),
+                ),
+                ft.OutlinedButton(
+                    "Ver Certificado de Derechos de Autor",
+                    icon=ft.Icons.SHIELD_ROUNDED,
+                    on_click=lambda _: open_author_rights_dialog(page),
+                    style=ft.ButtonStyle(
+                        color=AcademixColors.CYAN_NEON,
+                        side=ft.BorderSide(1, AcademixColors.CYAN_NEON),
+                        shape=ft.RoundedRectangleBorder(radius=10),
+                    ),
+                ),
+            ],
+            spacing=10,
+        ),
+        padding=18,
+        border_radius=18,
+        bgcolor=ft.Colors.with_opacity(0.2, "#07101C"),
+        border=ft.Border.all(1, ft.Colors.with_opacity(0.25, AcademixColors.CYAN_NEON)),
     )
 
     # ─── Tarjeta de Credenciales y Seguridad de Acceso ──────────
@@ -355,8 +469,12 @@ def ProfileScreen(page: ft.Page, focus_settings: bool = False):
             credentials_card,
             ft.Container(height=10),
             settings_card,
-            ft.Container(height=8),
+            ft.Container(height=10),
+            author_card,
+            ft.Container(height=12),
             logout_btn,
+            ft.Container(height=8),
+            build_copyright_footer(page),
         ],
         spacing=0,
     )

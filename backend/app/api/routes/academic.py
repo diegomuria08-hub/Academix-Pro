@@ -67,11 +67,12 @@ def delete_subject(
 @router.get("/subjects/{subject_id}/evaluations", response_model=List[EvaluationResponse])
 def get_evaluations_by_subject(
     subject_id: str,
+    lapso: int = None,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    """Lista todas las evaluaciones de una materia específica."""
-    return academic_service.get_subject_evaluations(db, current_user, subject_id)
+    """Lista todas las evaluaciones de una materia específica, opcionalmente filtradas por lapso."""
+    return academic_service.get_subject_evaluations(db, current_user, subject_id, lapso=lapso)
 
 @router.post("/subjects/{subject_id}/evaluations", response_model=EvaluationResponse, status_code=status.HTTP_201_CREATED)
 def create_evaluation(

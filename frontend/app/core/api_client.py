@@ -67,8 +67,9 @@ class ApiClient:
     def delete_subject(self, subject_id: str):
         return self.client.delete(f"/academic/subjects/{subject_id}")
 
-    def get_evaluations(self, subject_id: str):
-        return self.client.get(f"/academic/subjects/{subject_id}/evaluations")
+    def get_evaluations(self, subject_id: str, lapso: int = None):
+        params = {"lapso": lapso} if lapso is not None else None
+        return self.client.get(f"/academic/subjects/{subject_id}/evaluations", params=params)
 
     def create_evaluation(self, subject_id: str, data: dict):
         return self.client.post(f"/academic/subjects/{subject_id}/evaluations", json=data)

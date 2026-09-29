@@ -2,6 +2,7 @@ import flet as ft
 from app.core.api_client import api
 from app.core.state import state
 from app.theme.colors import AcademixColors
+from app.theme.copyright import build_copyright_footer
 
 COLOR_PALETTE = [
     ("#00E5FF", "Cian Neón"),
@@ -18,6 +19,7 @@ _is_subjects_fetching = False
 def SubjectsScreen(page: ft.Page, view_mode: str = "notas"):
     """
     Pantalla interactiva con CRUD completo de Materias y Evaluaciones conectado a Supabase / PostgreSQL.
+    Soporta modo Universidad (semestral) y modo Liceo (anual con 3 lapsos escolares independientes y definitiva final).
     """
     subjects_container = ft.Column(spacing=16)
     loading_ring = ft.ProgressBar(visible=False, color=AcademixColors.CYAN_NEON)
@@ -25,25 +27,94 @@ def SubjectsScreen(page: ft.Page, view_mode: str = "notas"):
     current_subjects_cache = _current_subjects_cache
     subject_cards_map = {}
 
+    def is_student_high_school():
+        if not state.current_user:
+            return False
+        profile = state.current_user.get("profile", {})
+        settings = state.current_user.get("settings", {})
+        st = profile.get("student_type")
+        em = settings.get("evaluation_mode")
+        return st in ["high_school", "StudentType.high_school"] or em == "liceo"
+
+    def get_total_lapsos():
+        if state.current_user and state.current_user.get("settings"):
+            return int(state.current_user["settings"].get("total_lapsos", 3) or 3)
+        return 3
+
+    def get_initial_lapso():
+        if state.current_user and state.current_user.get("settings"):
+            return int(state.current_user["settings"].get("current_lapso", 1) or 1)
+        return 1
+
+    selected_lapso = [get_initial_lapso()]
+
     def recalculate_subject_metrics_locally(sub):
         max_scale = float(sub.get("max_scale", 20.0))
         passing_grade = float(sub.get("passing_grade", 10.0))
         evals = sub.get("evaluations", [])
+        is_liceo = is_student_high_school()
+        tot_lapsos = get_total_lapsos()
 
-        accum_pts = 0.0
-        accum_pct = 0.0
+        if is_liceo:
+            lapsos_completed_grades = []
+            lapsos_summary = []
 
-        for ev in evals:
-            grade_obj = ev.get("grade")
-            score_val = grade_obj.get("score") if grade_obj else None
-            weight = float(ev.get("weight_percent", 0.0))
-            if score_val is not None:
-                pts_contrib = round(float(score_val) * (weight / 100.0), 2)
-                accum_pts += pts_contrib
-                accum_pct += weight
+            for l_num in range(1, tot_lapsos + 1):
+                l_evals = [ev for ev in evals if (ev.get("lapso_number", 1) or 1) == l_num]
+                l_pts = 0.0
+                l_weight = 0.0
+                graded_count = 0
 
-        accum_pts = round(accum_pts, 2)
-        accum_pct = round(accum_pct, 1)
+                for ev in l_evals:
+                    grade_obj = ev.get("grade")
+                    score_val = grade_obj.get("score") if grade_obj else None
+                    w = float(ev.get("weight_percent", 0.0))
+                    if score_val is not None:
+                        pts = round(float(score_val) * (w / 100.0), 2)
+                        l_pts += pts
+                        l_weight += w
+                        graded_count += 1
+
+                l_pts = round(l_pts, 2)
+                l_weight = round(l_weight, 1)
+
+                if graded_count > 0:
+                    lapsos_completed_grades.append(l_pts)
+                    g_val = l_pts
+                else:
+                    g_val = None
+
+                lapsos_summary.append({
+                    "lapso": l_num,
+                    "grade": g_val,
+                    "accumulated_points": l_pts,
+                    "evaluated_percent": l_weight,
+                    "is_completed": l_weight >= 100.0,
+                    "eval_count": len(l_evals),
+                })
+
+            sub["lapsos_summary"] = lapsos_summary
+            sub["annual_definitiva"] = round(sum(lapsos_completed_grades) / len(lapsos_completed_grades), 2) if lapsos_completed_grades else None
+
+            # Métricas para el lapso activo actualmente seleccionado
+            active_data = next((item for item in lapsos_summary if item["lapso"] == selected_lapso[0]), None)
+            accum_pts = active_data["accumulated_points"] if active_data else 0.0
+            accum_pct = active_data["evaluated_percent"] if active_data else 0.0
+
+        else:
+            accum_pts = 0.0
+            accum_pct = 0.0
+            for ev in evals:
+                grade_obj = ev.get("grade")
+                score_val = grade_obj.get("score") if grade_obj else None
+                weight = float(ev.get("weight_percent", 0.0))
+                if score_val is not None:
+                    pts_contrib = round(float(score_val) * (weight / 100.0), 2)
+                    accum_pts += pts_contrib
+                    accum_pct += weight
+
+            accum_pts = round(accum_pts, 2)
+            accum_pct = round(accum_pct, 1)
 
         is_passed = accum_pts >= passing_grade
         points_needed = round(max(0.0, passing_grade - accum_pts), 2) if not is_passed else 0.0
@@ -244,39 +315,53 @@ def SubjectsScreen(page: ft.Page, view_mode: str = "notas"):
         page.show_dialog(subject_dialog)
 
     # ─── Validación de Límite y Apertura de Modal ─────────────────
+    # ─── Validación de Límite y Apertura de Modal ─────────────────
     def check_and_open_eval_modal(subject_id: str):
         sub = next((s for s in current_subjects_cache if s["id"] == subject_id), None)
         if sub:
             max_evals = sub.get("max_evaluations")
             if not max_evals and state.current_user and state.current_user.get("settings"):
-                max_evals = state.current_user["settings"].get("default_eval_count", 5)
+                max_evals = state.current_user["settings"].get("default_eval_count", 4 if is_student_high_school() else 5)
             if not max_evals:
-                max_evals = 5
+                max_evals = 4 if is_student_high_school() else 5
 
             existing_evals = sub.get("evaluations", [])
-            if len(existing_evals) >= int(max_evals):
-                show_snack("Has alcanzado el límite máximo de evaluaciones configuradas para este periodo", error=True)
-                return
+            if is_student_high_school():
+                # En liceo se valida por el lapso activo
+                lapso_evals = [ev for ev in existing_evals if (ev.get("lapso_number", 1) or 1) == selected_lapso[0]]
+                if len(lapso_evals) >= int(max_evals):
+                    show_snack(f"Has alcanzado el límite de {max_evals} evaluaciones para el Lapso {selected_lapso[0]}", error=True)
+                    return
+            else:
+                if len(existing_evals) >= int(max_evals):
+                    show_snack("Has alcanzado el límite máximo de evaluaciones configuradas para este periodo", error=True)
+                    return
         open_eval_modal(subject_id)
 
     # ─── Modal para Agregar / Editar Evaluación ───────────────────
     def open_eval_modal(subject_id: str, eval_to_edit=None):
         is_edit = eval_to_edit is not None
         title_text = "Editar Evaluación" if is_edit else "Nueva Evaluación"
+        is_liceo = is_student_high_school()
+        tot_lapsos = get_total_lapsos()
 
         current_sub = next((s for s in current_subjects_cache if s["id"] == subject_id), None)
-        if not is_edit and current_sub:
-            max_evals = current_sub.get("max_evaluations")
-            if not max_evals and state.current_user and state.current_user.get("settings"):
-                max_evals = state.current_user["settings"].get("default_eval_count", 5)
-            if not max_evals:
-                max_evals = 5
-
-            if len(current_sub.get("evaluations", [])) >= int(max_evals):
-                show_snack("Has alcanzado el límite máximo de evaluaciones configuradas para este periodo", error=True)
-                return
 
         modal_error = ft.Text("", color=AcademixColors.ERROR, size=12, visible=False)
+
+        # Dropdown de Lapso para Estudiantes de Liceo
+        default_lapso_val = str(eval_to_edit.get("lapso_number", selected_lapso[0]) if is_edit else selected_lapso[0])
+        lapso_dd = ft.Dropdown(
+            label="Lapso Escolar",
+            value=default_lapso_val,
+            options=[ft.dropdown.Option(str(i), f"{i}° Lapso") for i in range(1, tot_lapsos + 1)],
+            filled=True,
+            bgcolor="#0F1E36",
+            color=ft.Colors.WHITE,
+            border=ft.OutlineInputBorder(border_radius=12, side=ft.BorderSide(color=AcademixColors.CYAN_NEON, width=1.4)),
+            label_style=ft.TextStyle(color=AcademixColors.CYAN_NEON, size=12, weight=ft.FontWeight.BOLD),
+            visible=is_liceo,
+        )
 
         name_field = ft.TextField(
             label="Nombre de la Evaluación",
@@ -360,15 +445,24 @@ def SubjectsScreen(page: ft.Page, view_mode: str = "notas"):
                 page.update()
                 return
 
+            target_lapso_int = int(lapso_dd.value) if is_liceo else 1
+
             # Validar que la sumatoria acumulada de ponderaciones no exceda el 100%
-            current_sub = next((s for s in current_subjects_cache if s["id"] == subject_id), None)
             if current_sub:
-                existing_weight = sum(
-                    ev["weight_percent"] for ev in current_sub.get("evaluations", [])
-                    if not (is_edit and ev["id"] == eval_to_edit["id"])
-                )
+                if is_liceo:
+                    existing_weight = sum(
+                        ev.get("weight_percent", 0.0) for ev in current_sub.get("evaluations", [])
+                        if (ev.get("lapso_number", 1) or 1) == target_lapso_int and not (is_edit and ev["id"] == eval_to_edit["id"])
+                    )
+                else:
+                    existing_weight = sum(
+                        ev.get("weight_percent", 0.0) for ev in current_sub.get("evaluations", [])
+                        if not (is_edit and ev["id"] == eval_to_edit["id"])
+                    )
+
                 if existing_weight + weight > 100.0:
-                    modal_error.value = f"La ponderación total ({existing_weight + weight:.1f}%) excedería el 100% permitido."
+                    scope_label = f"en el Lapso {target_lapso_int}" if is_liceo else ""
+                    modal_error.value = f"La ponderación acumulada ({existing_weight + weight:.1f}%) {scope_label} excedería el 100% permitido."
                     modal_error.visible = True
                     page.update()
                     return
@@ -399,6 +493,7 @@ def SubjectsScreen(page: ft.Page, view_mode: str = "notas"):
                 "eval_type": type_dd.value,
                 "weight_percent": weight,
                 "score": score,
+                "lapso_number": target_lapso_int,
             }
 
             try:
@@ -435,19 +530,25 @@ def SubjectsScreen(page: ft.Page, view_mode: str = "notas"):
                 modal_error.visible = True
                 page.update()
 
+        modal_controls = [
+            modal_error,
+        ]
+        if is_liceo:
+            modal_controls.append(lapso_dd)
+        modal_controls.extend([
+            name_field,
+            desc_field,
+            type_dd,
+            weight_field,
+            score_field,
+        ])
+
         eval_dialog = ft.AlertDialog(
             modal=True,
             title=ft.Text(title_text, weight=ft.FontWeight.BOLD, color=ft.Colors.WHITE),
             content=ft.Container(
                 content=ft.Column(
-                    [
-                        modal_error,
-                        name_field,
-                        desc_field,
-                        type_dd,
-                        weight_field,
-                        score_field,
-                    ],
+                    modal_controls,
                     spacing=14,
                     tight=True,
                 ),
@@ -535,9 +636,11 @@ def SubjectsScreen(page: ft.Page, view_mode: str = "notas"):
 
     # ─── Construcción de Tarjeta Individual de Materia ───────────
     def build_subject_card(sub):
+        recalculate_subject_metrics_locally(sub)
         sub_color = sub.get("color_hex") or AcademixColors.CYAN_NEON
         sub_id = sub["id"]
         evals = sub.get("evaluations", [])
+        is_liceo = is_student_high_school()
 
         # Métricas del Motor de Cálculo Adaptativo
         accum_pts = sub.get("accumulated_points", 0.0)
@@ -550,29 +653,31 @@ def SubjectsScreen(page: ft.Page, view_mode: str = "notas"):
         req_avg = sub.get("required_average_remaining")
 
         # Badge de Puntos Reales sobre 20
+        lapso_prefix = f"Lapso {selected_lapso[0]}: " if is_liceo else ""
         if accum_pct > 0:
             if is_passed:
-                avg_badge_text = f"⭐ {accum_pts:.2f} / {int(max_scale)} pts (¡Aprobada!)"
+                avg_badge_text = f"⭐ {lapso_prefix}{accum_pts:.2f} / {int(max_scale)} pts (¡Aprobado!)"
                 avg_color = AcademixColors.SUCCESS
             elif max_possible < passing_grade:
-                avg_badge_text = f"❌ {accum_pts:.2f} / {int(max_scale)} pts (Reprobada)"
+                avg_badge_text = f"❌ {lapso_prefix}{accum_pts:.2f} / {int(max_scale)} pts (Reprobado)"
                 avg_color = AcademixColors.ERROR
             elif accum_pts >= passing_grade * 0.7:
-                avg_badge_text = f"🔥 {accum_pts:.2f} / {int(max_scale)} pts (Faltan {points_needed:.2f})"
+                avg_badge_text = f"🔥 {lapso_prefix}{accum_pts:.2f} / {int(max_scale)} pts (Faltan {points_needed:.2f})"
                 avg_color = AcademixColors.CYAN_NEON
             else:
-                avg_badge_text = f"⚠️ {accum_pts:.2f} / {int(max_scale)} pts (Faltan {points_needed:.2f})"
+                avg_badge_text = f"⚠️ {lapso_prefix}{accum_pts:.2f} / {int(max_scale)} pts (Faltan {points_needed:.2f})"
                 avg_color = AcademixColors.WARNING
         else:
-            avg_badge_text = f"0.00 / {int(max_scale)} pts"
+            avg_badge_text = f"{lapso_prefix}0.00 / {int(max_scale)} pts"
             avg_color = ft.Colors.with_opacity(0.6, ft.Colors.WHITE)
 
         # Texto descriptivo de proyección
+        period_term = f"el Lapso {selected_lapso[0]}" if is_liceo else "la materia"
         if is_passed:
-            projection_desc = f"🎉 ¡Materia superada! Ya acumulaste {accum_pts:.2f} de los {int(passing_grade)} puntos mínimos requeridos."
+            projection_desc = f"🎉 ¡Objetivo superado! Ya acumulaste {accum_pts:.2f} de los {int(passing_grade)} puntos requeridos para {period_term}."
             desc_color = AcademixColors.SUCCESS
         elif max_possible < passing_grade:
-            projection_desc = f"⚠️ Matemáticamente reprobada. Máximo alcanzable: {max_possible:.2f} pts en el {100 - accum_pct:.0f}% restante."
+            projection_desc = f"⚠️ Matemáticamente reprobado. Máximo alcanzable: {max_possible:.2f} pts en el {100 - accum_pct:.0f}% restante de {period_term}."
             desc_color = AcademixColors.ERROR
         else:
             req_txt = f" | Requiere promedio de {req_avg:.2f} pts en lo pendiente" if (req_avg is not None and req_avg > 0) else ""
@@ -583,10 +688,16 @@ def SubjectsScreen(page: ft.Page, view_mode: str = "notas"):
         pts_flex = max(1, int((accum_pts / max_scale) * 100)) if accum_pts > 0 else 0
         empty_flex = max(1, 100 - pts_flex)
 
+        # Filtrar evaluaciones del lapso seleccionado si es liceo
+        if is_liceo:
+            display_evals = [ev for ev in evals if int(ev.get("lapso_number", 1)) == selected_lapso[0]]
+        else:
+            display_evals = evals
+
         # Construir lista de evaluaciones con aporte a la definitiva
         eval_rows = []
-        if evals:
-            for ev in evals:
+        if display_evals:
+            for ev in display_evals:
                 ev_id = ev["id"]
                 grade_obj = ev.get("grade")
                 score_val = grade_obj.get("score") if grade_obj else None
@@ -712,16 +823,103 @@ def SubjectsScreen(page: ft.Page, view_mode: str = "notas"):
                 )
                 eval_rows.append(eval_row)
         else:
+            no_evals_msg = (
+                f"No has registrado evaluaciones en el Lapso {selected_lapso[0]} para esta materia. Haz clic en '+ Evaluación' para agregar la primera."
+                if is_liceo
+                else "No has agregado evaluaciones a esta materia. Haz clic en '+ Evaluación' para registrar el primer examen o tarea."
+            )
             eval_rows.append(
                 ft.Text(
-                    "No has agregado evaluaciones a esta materia. Haz clic en '+ Evaluación' para registrar el primer examen o tarea.",
+                    no_evals_msg,
                     size=12,
                     color=ft.Colors.with_opacity(0.5, ft.Colors.WHITE),
                     italic=True,
                 )
             )
 
+        # Elementos adicionales específicos para Estudiante de Liceo
+        liceo_header_controls = []
+        if is_liceo:
+            # Resumen de Lapsos de esta materia
+            lapsos_chips = []
+            for item in sub.get("lapsos_summary", []):
+                l_num = item["lapso"]
+                l_pts = item["accumulated_points"]
+                l_pct = item["evaluated_percent"]
+                is_selected = (l_num == selected_lapso[0])
+                
+                chip_label = f"Lapso {l_num}: {l_pts:.1f} pts" if l_pct > 0 else f"Lapso {l_num}: Sin notas"
+                chip_border_col = AcademixColors.CYAN_NEON if is_selected else ft.Colors.with_opacity(0.25, ft.Colors.WHITE)
+                chip_text_col = AcademixColors.CYAN_NEON if is_selected else (AcademixColors.SUCCESS if l_pts >= passing_grade else ft.Colors.with_opacity(0.8, ft.Colors.WHITE))
+                
+                def on_chip_click(e, ln=l_num):
+                    selected_lapso[0] = ln
+                    render_subjects(current_subjects_cache)
+                    try:
+                        page.update()
+                    except Exception:
+                        pass
+
+                lapsos_chips.append(
+                    ft.Container(
+                        content=ft.Text(chip_label, size=11, weight=ft.FontWeight.BOLD if is_selected else ft.FontWeight.NORMAL, color=chip_text_col),
+                        bgcolor=ft.Colors.with_opacity(0.2 if is_selected else 0.08, AcademixColors.CYAN_NEON if is_selected else ft.Colors.WHITE),
+                        border=ft.Border.all(1.5 if is_selected else 1, chip_border_col),
+                        border_radius=8,
+                        padding=ft.Padding(8, 4, 8, 4),
+                        tooltip=f"Ver evaluaciones del Lapso {l_num} ({l_pct:.0f}% evaluado)",
+                        on_click=on_chip_click,
+                    )
+                )
+
+            # Badge de Definitiva Anual
+            annual_def = sub.get("annual_definitiva")
+            if annual_def is not None:
+                def_text = f"Definitiva Anual: {annual_def:.2f} / {int(max_scale)} pts"
+                def_col = AcademixColors.SUCCESS if annual_def >= passing_grade else AcademixColors.ERROR
+            else:
+                def_text = "Definitiva Anual: En progreso"
+                def_col = ft.Colors.with_opacity(0.7, ft.Colors.WHITE)
+
+            annual_badge = ft.Container(
+                content=ft.Row(
+                    [
+                        ft.Icon(ft.Icons.SCHOOL, size=14, color=def_col),
+                        ft.Text(def_text, size=11, weight=ft.FontWeight.BOLD, color=def_col),
+                    ],
+                    spacing=6,
+                ),
+                bgcolor=ft.Colors.with_opacity(0.14, def_col),
+                border=ft.Border.all(1, ft.Colors.with_opacity(0.35, def_col)),
+                border_radius=8,
+                padding=ft.Padding(8, 4, 8, 4),
+            )
+
+            liceo_header_controls.append(
+                ft.Container(
+                    content=ft.Column(
+                        [
+                            ft.Row(
+                                [
+                                    ft.Text("Rendimiento del Año Escolar:", size=11, weight=ft.FontWeight.BOLD, color=ft.Colors.with_opacity(0.7, ft.Colors.WHITE)),
+                                    annual_badge,
+                                ],
+                                alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
+                                vertical_alignment=ft.CrossAxisAlignment.CENTER,
+                            ),
+                            ft.Row(lapsos_chips, spacing=6, wrap=True),
+                        ],
+                        spacing=6,
+                    ),
+                    padding=ft.Padding(10, 8, 10, 8),
+                    border_radius=10,
+                    bgcolor=ft.Colors.with_opacity(0.1, ft.Colors.BLACK),
+                )
+            )
+
         # Tarjeta de la Materia
+        add_eval_label = f"Evaluación (L{selected_lapso[0]})" if is_liceo else "Evaluación"
+
         card = ft.Container(
             content=ft.Column(
                 [
@@ -766,11 +964,11 @@ def SubjectsScreen(page: ft.Page, view_mode: str = "notas"):
                                 alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
                                 vertical_alignment=ft.CrossAxisAlignment.CENTER,
                             ),
-                            # Fila 2: Badges (Créditos UC + Estado de Calificación / Promedio)
+                            # Fila 2: Badges (Créditos UC/Horas + Estado de Calificación / Promedio)
                             ft.Row(
                                 [
                                     ft.Container(
-                                        content=ft.Text(f"{sub.get('credits', 0)} UC", size=10, weight=ft.FontWeight.W_600, color=ft.Colors.WHITE),
+                                        content=ft.Text(f"{sub.get('credits', 0)} {'Horas' if is_liceo else 'UC'}", size=10, weight=ft.FontWeight.W_600, color=ft.Colors.WHITE),
                                         bgcolor=ft.Colors.with_opacity(0.15, ft.Colors.WHITE),
                                         padding=ft.Padding(8, 3, 8, 3),
                                         border_radius=6,
@@ -786,15 +984,16 @@ def SubjectsScreen(page: ft.Page, view_mode: str = "notas"):
                                 spacing=8,
                                 vertical_alignment=ft.CrossAxisAlignment.CENTER,
                             ),
+                            *liceo_header_controls,
                         ],
-                        spacing=6,
+                        spacing=8,
                     ),
                     # Barra de Progreso de Puntos Reales Ganados
                     ft.Column(
                         [
                             ft.Row(
                                 [
-                                    ft.Text(f"Puntos Ganados: {accum_pts:.2f} / {int(max_scale)} pts", size=12, weight=ft.FontWeight.BOLD, color=AcademixColors.CYAN_NEON),
+                                    ft.Text(f"Puntos Ganados ({'Lapso ' + str(selected_lapso[0]) if is_liceo else 'Materia'}): {accum_pts:.2f} / {int(max_scale)} pts", size=12, weight=ft.FontWeight.BOLD, color=AcademixColors.CYAN_NEON),
                                     ft.Text(f"Evaluado: {accum_pct:.0f}% de 100%", size=11, color=ft.Colors.with_opacity(0.7, ft.Colors.WHITE)),
                                 ],
                                 alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
@@ -836,9 +1035,9 @@ def SubjectsScreen(page: ft.Page, view_mode: str = "notas"):
                     # Sub-sección de Evaluaciones
                     ft.Row(
                         [
-                            ft.Text("Evaluaciones & Calificaciones:", size=13, weight=ft.FontWeight.W_600, color=ft.Colors.with_opacity(0.85, ft.Colors.WHITE)),
+                            ft.Text(f"Evaluaciones ({'Lapso ' + str(selected_lapso[0]) if is_liceo else 'Periodo'}):", size=13, weight=ft.FontWeight.W_600, color=ft.Colors.with_opacity(0.85, ft.Colors.WHITE)),
                             ft.TextButton(
-                                "Evaluación",
+                                add_eval_label,
                                 icon=ft.Icons.ADD,
                                 on_click=lambda _, s_id=sub_id: check_and_open_eval_modal(s_id),
                                 style=ft.ButtonStyle(color=AcademixColors.CYAN_NEON),
@@ -876,7 +1075,7 @@ def SubjectsScreen(page: ft.Page, view_mode: str = "notas"):
                         ),
                         ft.Text("Aún no tienes materias registradas", size=20, weight=ft.FontWeight.BOLD, color=ft.Colors.WHITE),
                         ft.Text(
-                            "Comienza agregando las materias que estás cursando este periodo.\nPodrás registrar tus evaluaciones y notas para que tus promedios se calculen automáticamente.",
+                            "Comienza agregando las materias que estás cursando este año o periodo escolar.\nPodrás registrar tus evaluaciones por cada lapso y calcular tu definitiva automáticamente.",
                             size=13,
                             color=ft.Colors.with_opacity(0.7, ft.Colors.WHITE),
                             text_align=ft.TextAlign.CENTER,
@@ -916,6 +1115,70 @@ def SubjectsScreen(page: ft.Page, view_mode: str = "notas"):
     # Cargar datos al iniciar
     load_data()
 
+    # Barra selectora superior de Lapsos para Liceo
+    lapso_bar_controls = []
+    if is_student_high_school():
+        total_l = get_total_lapsos()
+        lapso_buttons = []
+        for l_idx in range(1, total_l + 1):
+            is_active = (l_idx == selected_lapso[0])
+            def make_change_lapso(idx):
+                def _change(e):
+                    selected_lapso[0] = idx
+                    render_subjects(current_subjects_cache)
+                    try:
+                        page.update()
+                    except Exception:
+                        pass
+                return _change
+
+            lapso_buttons.append(
+                ft.Container(
+                    content=ft.Row(
+                        [
+                            ft.Icon(ft.Icons.CHECK_CIRCLE if is_active else ft.Icons.RADIO_BUTTON_UNCHECKED, size=14, color=AcademixColors.CYAN_NEON if is_active else ft.Colors.with_opacity(0.6, ft.Colors.WHITE)),
+                            ft.Text(f"{l_idx}º Lapso", size=12, weight=ft.FontWeight.BOLD if is_active else ft.FontWeight.NORMAL, color=ft.Colors.WHITE if is_active else ft.Colors.with_opacity(0.7, ft.Colors.WHITE)),
+                        ],
+                        spacing=6,
+                        alignment=ft.MainAxisAlignment.CENTER,
+                    ),
+                    bgcolor=ft.Colors.with_opacity(0.25 if is_active else 0.08, AcademixColors.CYAN_NEON if is_active else ft.Colors.WHITE),
+                    border=ft.Border.all(1.5 if is_active else 1, AcademixColors.CYAN_NEON if is_active else ft.Colors.with_opacity(0.2, ft.Colors.WHITE)),
+                    border_radius=10,
+                    padding=ft.Padding(12, 8, 12, 8),
+                    on_click=make_change_lapso(l_idx),
+                )
+            )
+
+        lapso_bar_controls.append(
+            ft.Container(
+                content=ft.Column(
+                    [
+                        ft.Row(
+                            [
+                                ft.Row(
+                                    [
+                                        ft.Icon(ft.Icons.CALENDAR_MONTH, size=16, color=AcademixColors.CYAN_NEON),
+                                        ft.Text("Visualizando Lapso Escolar:", size=12, weight=ft.FontWeight.BOLD, color=ft.Colors.WHITE),
+                                    ],
+                                    spacing=6,
+                                ),
+                                ft.Text(f"{total_l} Lapsos en el Año Escolar", size=11, color=ft.Colors.with_opacity(0.6, ft.Colors.WHITE)),
+                            ],
+                            alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
+                        ),
+                        ft.Row(lapso_buttons, spacing=8, wrap=True),
+                    ],
+                    spacing=8,
+                ),
+                padding=12,
+                border_radius=14,
+                bgcolor=ft.Colors.with_opacity(0.18, "#0D1B2A"),
+                border=ft.Border.all(1, ft.Colors.with_opacity(0.15, ft.Colors.WHITE)),
+            )
+        )
+        lapso_bar_controls.append(ft.Container(height=8))
+
     return ft.Column(
         [
             ft.Row(
@@ -923,7 +1186,7 @@ def SubjectsScreen(page: ft.Page, view_mode: str = "notas"):
                     ft.Column(
                         [
                             ft.Text("Notas & Asignaturas 📝", size=19, weight=ft.FontWeight.BOLD, color=ft.Colors.WHITE),
-                            ft.Text("Puntos acumulados y metas por materia", size=12, color=ft.Colors.with_opacity(0.6, ft.Colors.WHITE)),
+                            ft.Text("Gestión escolar por lapsos y definitiva anual" if is_student_high_school() else "Puntos acumulados y metas por materia", size=12, color=ft.Colors.with_opacity(0.6, ft.Colors.WHITE)),
                         ],
                         spacing=2,
                         expand=True,
@@ -944,8 +1207,13 @@ def SubjectsScreen(page: ft.Page, view_mode: str = "notas"):
                 vertical_alignment=ft.CrossAxisAlignment.CENTER,
             ),
             ft.Container(height=10),
+            *lapso_bar_controls,
             loading_ring,
             subjects_container,
+            ft.Container(height=20),
+            build_copyright_footer(page),
+            ft.Container(height=20),
         ],
         spacing=0,
     )
+
